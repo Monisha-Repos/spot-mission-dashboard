@@ -84,6 +84,7 @@ public final class Main {
         HttpClient http = HttpClient.newHttpClient();
 
         List<Map<String, Object>> bundles = KitData.load(kitDir(config)).bundles(scenario);
+        waitForServer(http, url);
         log("feeding " + bundles.size() + " " + scenario + " mission(s) to " + url + ", one every " + delayMs / 1000.0 + " s");
         for (int i = 0; i < bundles.size(); i++) {
             if (i > 0) Thread.sleep(delayMs);
@@ -103,6 +104,20 @@ public final class Main {
             }
         }
         log("feed finished");
+    }
+
+    /** `serve` checks the lakehouse tables before it listens, which takes a few seconds on Databricks. */
+    private static void waitForServer(HttpClient http, String url) throws InterruptedException {
+        HttpRequest health = HttpRequest.newBuilder(URI.create(url + "/health")).GET().build();
+        for (int attempt = 0; attempt < 60; attempt++) {
+            try {
+                if (http.send(health, HttpResponse.BodyHandlers.discarding()).statusCode() == 200) return;
+            } catch (java.io.IOException notUpYet) {
+                if (attempt == 0) log("waiting for the API at " + url + " (start it with: serve)");
+            }
+            Thread.sleep(1000);
+        }
+        throw new IllegalStateException("no API answering at " + url + " after 60 s; is `serve` running?");
     }
 
     private static Path kitDir(Config config) {

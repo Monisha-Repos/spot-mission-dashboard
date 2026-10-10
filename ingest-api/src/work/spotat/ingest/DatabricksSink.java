@@ -16,11 +16,11 @@ import java.util.stream.Collectors;
 
 /**
  * Writes to Delta tables through the Databricks SQL Statement Execution API
- * (POST /api/2.0/sql/statements), so no JDBC driver is needed. Values are always sent as typed
- * parameters, never concatenated into SQL.
+ * (POST /api/2.0/sql/statements), so no JDBC driver is needed. Values are always sent as
+ * parameters, never concatenated into SQL: each is passed as text and CAST to the column type.
  */
 final class DatabricksSink implements Sink {
-    private static final int ROWS_PER_INSERT = 25;
+    private static final int MAX_PARAMS_PER_STATEMENT = 250;
     private static final Duration STATEMENT_TIMEOUT = Duration.ofMinutes(5);
 
     private final String host;
@@ -31,11 +31,16 @@ final class DatabricksSink implements Sink {
     private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
 
     DatabricksSink(Config config) {
-        String h = config.require("DATABRICKS_HOST").replaceAll("/+$", "");
-        host = h.startsWith("http") ? h : "https://" + h;
+        // Accepts "adb-123.azuredatabricks.net" or a URL pasted from the browser, e.g. "https://dbc-1.cloud.databricks.com/?o=42#".
+        String h = config.require("DATABRICKS_HOST").trim();
+        URI uri = URI.create(h.contains("://") ? h : "https://" + h);
+        host = uri.getScheme() + "://" + uri.getAuthority();
         token = config.require("DATABRICKS_TOKEN");
-        warehouseId = config.require("DATABRICKS_WAREHOUSE_ID");
-        catalog = config.get("DATABRICKS_CATALOG", "main");
+        // The warehouse's "HTTP path" (/sql/1.0/warehouses/<id>) ends with its ID, and the Python connector needs that path anyway.
+        String httpPath = config.get("DATABRICKS_HTTP_PATH", "");
+        warehouseId = config.get("DATABRICKS_WAREHOUSE_ID", httpPath.isEmpty() ? null : httpPath.replaceAll("/+$", "").replaceAll(".*/", ""));
+        if (warehouseId == null) throw new IllegalStateException("set DATABRICKS_HTTP_PATH or DATABRICKS_WAREHOUSE_ID (see .env.example)");
+        catalog = config.get("DATABRICKS_CATALOG", "workspace");
         schema = config.get("DATABRICKS_SCHEMA", "spot");
     }
 
@@ -59,17 +64,17 @@ final class DatabricksSink implements Sink {
     @Override
     public void append(Schema.Table table, List<Map<String, String>> rows) throws Exception {
         String columns = table.columnNames().stream().map(DatabricksSink::ident).collect(Collectors.joining(", "));
-        for (int start = 0; start < rows.size(); start += ROWS_PER_INSERT) {
+        int rowsPerInsert = Math.max(1, MAX_PARAMS_PER_STATEMENT / table.columns().size());
+        for (int start = 0; start < rows.size(); start += rowsPerInsert) {
             List<String> tuples = new ArrayList<>();
             List<Map<String, Object>> params = new ArrayList<>();
-            for (Map<String, String> row : rows.subList(start, Math.min(rows.size(), start + ROWS_PER_INSERT))) {
+            for (Map<String, String> row : rows.subList(start, Math.min(rows.size(), start + rowsPerInsert))) {
                 List<String> markers = new ArrayList<>();
                 for (Schema.Column column : table.columns()) {
                     String paramName = "p" + params.size();
-                    markers.add(":" + paramName);
+                    markers.add("CAST(:" + paramName + " AS " + column.type().name() + ")");
                     Map<String, Object> param = new LinkedHashMap<>();
                     param.put("name", paramName);
-                    param.put("type", column.type().name());
                     String value = row.getOrDefault(column.name(), "");
                     // An omitted value is NULL in the Statement Execution API.
                     if (!value.isEmpty()) {
@@ -80,6 +85,14 @@ final class DatabricksSink implements Sink {
                 tuples.add("(" + String.join(", ", markers) + ")");
             }
             execute("INSERT INTO " + name(table) + " (" + columns + ") VALUES " + String.join(", ", tuples), params);
+        }
+    }
+
+    @Override
+    public void deleteMission(String missionId) throws Exception {
+        for (Schema.Table table : List.of(Schema.ANOMALIES, Schema.READINGS, Schema.ACTIONS, Schema.MISSIONS)) {
+            execute("DELETE FROM " + name(table) + " WHERE mission_id = :mission_id",
+                    List.of(Map.of("name", "mission_id", "value", missionId)));
         }
     }
 
@@ -147,6 +160,10 @@ final class DatabricksSink implements Sink {
                 .header("Content-Type", "application/json")
                 .timeout(Duration.ofSeconds(60))
                 .build(), HttpResponse.BodyHandlers.ofString());
+        if (response.statusCode() == 401 || response.statusCode() == 403) {
+            throw new IOException("Databricks rejected the token (HTTP " + response.statusCode()
+                    + "). Check DATABRICKS_TOKEN and that it may use the SQL warehouse.");
+        }
         if (response.statusCode() / 100 != 2) {
             throw new IOException("Databricks HTTP " + response.statusCode() + ": " + response.body());
         }

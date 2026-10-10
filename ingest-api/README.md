@@ -15,7 +15,7 @@ cp .env.example .env          # optional; defaults work offline
 
 On Windows PowerShell, use `.\run.ps1` with the same arguments.
 
-Run `seed --reset` again before each demo run to go back to baseline only.
+Run `seed --reset` again before each demo run to go back to baseline only. On Databricks, seeding takes about 3 minutes and each live mission takes about 8 seconds to write.
 
 ## Endpoints
 
@@ -56,8 +56,8 @@ Set these in `.env` or as environment variables (see `.env.example`):
 |---|---|---|
 | `SINK` | `databricks` if `DATABRICKS_HOST` is set, otherwise `local` | Where rows are written |
 | `LAKEHOUSE_DIR` | `../data/lakehouse` | Local target: one CSV per table, same format as the kit |
-| `DATABRICKS_HOST`, `DATABRICKS_TOKEN`, `DATABRICKS_WAREHOUSE_ID` | | Databricks target, written through the SQL Statement Execution API |
-| `DATABRICKS_CATALOG`, `DATABRICKS_SCHEMA` | `main`, `spot` | Where the Delta tables live |
+| `DATABRICKS_HOST`, `DATABRICKS_HTTP_PATH`, `DATABRICKS_TOKEN` | | Databricks target, written through the SQL Statement Execution API (`DATABRICKS_WAREHOUSE_ID` also works in place of the HTTP path) |
+| `DATABRICKS_CATALOG`, `DATABRICKS_SCHEMA` | `workspace`, `spot` | Where the Delta tables live (Free Edition's catalog is `workspace`) |
 | `KIT_DATA_DIR` | `../SPOT_KnightHacks_Challenge_Kit Part One/02_DATA` | Source data for `seed` and `feed` |
 | `PORT` | `8081` | |
 | `INGEST_API_KEY` | | When set, `POST` requests need the header `X-API-Key` |

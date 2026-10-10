@@ -43,6 +43,17 @@ final class LocalCsvSink implements Sink {
     }
 
     @Override
+    public synchronized void deleteMission(String missionId) throws IOException {
+        for (Schema.Table table : List.of(Schema.MISSIONS, Schema.ACTIONS, Schema.READINGS, Schema.ANOMALIES)) {
+            if (Files.notExists(file(table))) continue;
+            List<Map<String, String>> kept = Csv.read(file(table)).stream()
+                    .filter(r -> !missionId.equals(r.get("mission_id"))).toList();
+            Files.writeString(file(table), Csv.line(table.columnNames()) + "\n");
+            append(table, kept);
+        }
+    }
+
+    @Override
     public synchronized List<Map<String, String>> rows(Schema.Table table, String... columns) throws IOException {
         if (Files.notExists(file(table))) return List.of();
         return Csv.read(file(table)).stream().map(row -> {

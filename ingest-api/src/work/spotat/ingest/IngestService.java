@@ -60,10 +60,20 @@ final class IngestService {
             boolean exists = sink.rows(Schema.MISSIONS, "mission_id").stream()
                     .anyMatch(r -> missionId.equals(r.get("mission_id")));
             if (exists) return new Result(409, Map.of("error", "mission " + missionId + " is already in the lakehouse"));
-            sink.append(Schema.MISSIONS, List.of(mission));
-            sink.append(Schema.ACTIONS, actions);
-            sink.append(Schema.READINGS, readings);
-            sink.append(Schema.ANOMALIES, anomalies);
+            // Databricks has no transaction across the four INSERTs, so undo a half-written mission on failure.
+            try {
+                sink.append(Schema.MISSIONS, List.of(mission));
+                sink.append(Schema.ACTIONS, actions);
+                sink.append(Schema.READINGS, readings);
+                sink.append(Schema.ANOMALIES, anomalies);
+            } catch (Exception e) {
+                try {
+                    sink.deleteMission(missionId);
+                } catch (Exception cleanup) {
+                    e.addSuppressed(cleanup);
+                }
+                throw e;
+            }
         }
 
         Map<String, Object> inserted = new LinkedHashMap<>();

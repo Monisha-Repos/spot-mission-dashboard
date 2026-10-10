@@ -15,6 +15,9 @@ interface Sink {
     /** Appends rows already normalized by {@link Schema#normalize}. */
     void append(Schema.Table table, List<Map<String, String>> rows) throws Exception;
 
+    /** Removes every row of one mission. Used to undo a mission that was only partly written. */
+    void deleteMission(String missionId) throws Exception;
+
     /** Returns the requested columns of every row, as text. */
     List<Map<String, String>> rows(Schema.Table table, String... columns) throws Exception;
 
