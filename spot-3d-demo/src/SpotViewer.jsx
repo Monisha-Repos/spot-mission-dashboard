@@ -70,13 +70,14 @@ const SpotViewer = forwardRef(function SpotViewer({
   autoRotate = false, wireframe = false, showGrid = true, quality = 'balanced',
   view = 'perspective', resetKey = 0, onStats,
   theme = 'dark', hotspots = false, focusPart = null, onPartSelect, partStatus = {},
+  shiftX = 0, // move the robot sideways on screen, as a fraction of the width (+ is right)
 }, ref) {
   const host = useRef(null);
   const engine = useRef(null);
   const markers = useRef({});
   const [error, setError] = useState('');
   const props = useRef({});
-  props.current = { stance, playing, speed, bodyHeight, autoRotate, wireframe, showGrid, quality, onStats, hotspots, onPartSelect };
+  props.current = { stance, playing, speed, bodyHeight, autoRotate, wireframe, showGrid, quality, onStats, hotspots, onPartSelect, shiftX };
 
   useImperativeHandle(ref, () => ({
     async exportGLB() {
@@ -233,6 +234,10 @@ const SpotViewer = forwardRef(function SpotViewer({
       renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, props.current.quality === 'eco' ? 1 : 1.5));
       renderer.setSize(width, height);
       camera.aspect = width / height;
+      // A view offset slides the picture without moving the orbit pivot, so hotspots and picking stay aligned.
+      const shift = props.current.shiftX || 0;
+      if (shift) camera.setViewOffset(width, height, -shift * width, 0, width, height);
+      else camera.clearViewOffset();
       camera.updateProjectionMatrix();
       invalidate();
     }
@@ -335,7 +340,7 @@ const SpotViewer = forwardRef(function SpotViewer({
     e.grid.visible = showGrid;
     e.resize();
     e.invalidate();
-  }, [stance, playing, speed, bodyHeight, autoRotate, wireframe, showGrid, quality, hotspots]);
+  }, [stance, playing, speed, bodyHeight, autoRotate, wireframe, showGrid, quality, hotspots, shiftX]);
   useEffect(() => { engine.current?.makeGrid(theme); engine.current?.invalidate(); }, [theme]);
   useEffect(() => { engine.current?.setView(view); }, [view, resetKey]);
   useEffect(() => { if (hotspots) engine.current?.focus(focusPart); }, [focusPart, hotspots]);
