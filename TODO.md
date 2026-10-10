@@ -16,8 +16,8 @@ finish all coding!
 
 ### Sunday (10/11)
 deploy to custom domain
-create demo video
-judging prep
+create demo video - funny, simple, short
+judging prep - knowing context, code, advantages (how it stands out), limitations, future improvements, AI as a coding orchestrater
 final touches
 devpost submission by **10 AM**
 final commit, make repository public by **11 AM**
@@ -36,7 +36,7 @@ Two public tabs and one AI assistant shared by both, plus a separate **Operator 
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│  [ Overview ]  [ Data Scientist ]  [ Operator 🔒 ] spotat.work│
+│  [ Overview ]  [ Data Scientist ]  [ Operator  ] spotat.work │
 ├──────────────────────────────────────────────────────────────┤
 │                                                              │
 │                  3D SPOT model (rotate / zoom)               │
@@ -125,7 +125,7 @@ The Overview and Data Scientist tabs **show** what happened. The Operator Consol
 When a live mission brings in an anomaly that is HIGH or CRITICAL, or has `operator_review_required = True`, every open dashboard tab shows a full-screen alarm that stays up until someone makes a decision. In the kit's IMPROVED data that happens 5 times across 9 missions (M020, M022, M024, M025, M027).
 - **How it gets there:** the frontend opens `EventSource(INGEST_URL + "/events")`. Each `mission_ingested` event already includes its `alerts[]` (the anomaly plus the reading that triggered it), so the pop-up appears with no extra request. The data views also refresh on every event, so new missions show up live.
 - **Sound:** a two-tone siren made with the Web Audio API (alternating 600 Hz and 900 Hz every 0.4 s, looping until a decision). No audio file is needed. Browsers block sound until the page has been clicked, so show an **"Arm alarms 🔊"** button on load and click it at the start of the demo. A **Mute** button stops the sound but keeps the pop-up.
-- **What it shows:** a red flashing border; severity and type in large text ("CRITICAL · ABNORMAL TEMPERATURE"); asset name and criticality; waypoint name and floor; the reading compared with normal ("41.4 °C"); the time and mission; a **floor-plan crop with the waypoint pulsing** (x/y from `locations.csv`); and a **picture of the situation** from `assets/inspection-images/`, labelled as a reference image:
+- **What it shows:** a red flashing border; severity and type in large text ("CRITICAL · ABNORMAL TEMPERATURE"); asset name and criticality; waypoint name and floor; the reading compared with normal ("41.4 °C"); the time and mission; a **floor-plan crop with the waypoint pulsing** (x/y from `locations.csv`); and a **picture of the situation** from `04_ASSETS/sample_inspection_images`, labelled as a reference image:
 
   | anomaly_type | image |
   |---|---|
@@ -191,10 +191,10 @@ snapshots(snapshot_id, label, note, scope, kpis_json, created_by, created_at, au
 Priority key: **P0** = must ship · **P1** = high value, should ship · **P2** = nice to have · **P3** = stretch goal
 
 ### P0: Data + API Foundation
-- [ ] Load all CSVs and `replay.ndjson` into one Inspection Record schema (see README) — _owner:_
-- [ ] Status classification (Normal / Watch / Action) + plain-English explanations — _owner:_
-- [ ] API endpoints: missions, records, per-SPOT-part summary, per-waypoint summary, metrics — _owner:_
-- [ ] BASELINE vs IMPROVED (V1 vs V2) comparison. The brief asks for this directly. — _owner:_
+- [x] Load all CSVs into one Inspection Record schema (see README); replay is rebuilt from actions so live missions replay too — `backend/app/records.py`
+- [x] Status classification (Normal / Watch / Action) + plain-English explanations — `backend/app/records.py`
+- [x] API endpoints: missions, records, per-SPOT-part summary, per-waypoint summary, metrics — see `backend/README.md`
+- [x] BASELINE vs IMPROVED (V1 vs V2) comparison with significance tests — `GET /compare`
 
 ### P0: Overview Tab (landing page)
 - [ ] 3D SPOT model loaded in React Three Fiber (`@react-three/fiber` + `@react-three/drei`) — _owner:_
@@ -206,10 +206,10 @@ Priority key: **P0** = must ship · **P1** = high value, should ship · **P2** =
 > **3D model source:** look for a SPOT glTF/GLB with a license that allows reuse (Sketchfab CC-BY, or meshes from Boston Dynamics' open-source `spot_description` package). Credit it in the README. **Fallback:** a stylized low-poly SPOT made from boxes and cylinders still works, because the hotspots are what matter. Decide in Phase 0 so nobody blocks on it.
 
 ### P0: AI Assistant (popup, both tabs)
-- [ ] RAG pipeline: embed the data dictionary, challenge docs, SPOT user guide, and per-mission / per-anomaly summaries — _owner:_
-- [ ] `/ask` endpoint: retrieve top-k → LLM → answer citing IDs. Takes `mode` (`simple` / `technical`) and `context` (selected part / floor / waypoint) — _owner:_
+- [x] RAG pipeline over the data dictionary, challenge docs, SPOT user guide and per-record / mission / waypoint / asset summaries (TF-IDF retrieval, ~450 docs) — `backend/app/assistant.py`
+- [x] `/ask` endpoint: retrieve top-k → LLM (Claude or Hugging Face, switchable) → answer citing IDs. Takes `mode` and `context`
 - [ ] Bottom-right popup chat component, shared by both tabs — _owner:_
-- [ ] Guardrail: if retrieval finds nothing relevant, answer "I don't have data on that" instead of guessing — _owner:_
+- [x] Guardrail: off-topic questions get "I don't have data on that" without an LLM call
 
 **Keep it simple:** in-memory vector store (FAISS / Chroma) + one LLM call. Don't build an agent framework at a hackathon.
 
@@ -222,15 +222,15 @@ Priority key: **P0** = must ship · **P1** = high value, should ship · **P2** =
 - [ ] **Generate PDF**: timestamped snapshot of the current results (`jsPDF` + `jspdf-autotable` for tables; filename like `spot-report-2026-10-11T08-30.pdf`) — _owner:_
 
 ### P1: Operator Console Module (see the Product Vision spec)
-- [ ] `backend/ops/`: SQLite schema (`issues`, `issue_events`, `snapshots`) + generate issues from anomalies and failed actions — _owner:_
-- [ ] Shared `compute_kpis(scope)` function, used by `/ops/kpis`, snapshots and the PDF export — _owner:_
-- [ ] `/ops/*` endpoints + PIN sign-in, with writes rejected unless signed in — _owner:_
-- [ ] Seed snapshot history from the BASELINE missions only (one per mission day); auto-snapshot after each live mission via `/ops/ingest-hook` — _owner:_
-- [ ] `/ops/alerts` + decision endpoint; time-to-respond KPI — _owner:_
+- [x] `backend/app/ops/`: SQLite schema (`issues`, append-only `issue_events`, `snapshots`) + issues from anomalies and failed actions
+- [x] Shared `compute_kpis(scope)` function, used by `/kpis`, `/ops/kpis` and snapshots (the PDF export can call `/ops/snapshots/{id}`)
+- [x] `/ops/*` endpoints + PIN sign-in, with writes rejected unless signed in
+- [x] Seed snapshot history from the BASELINE missions only (one per mission day); auto-snapshot after each live mission via `/ops/ingest-hook`
+- [x] `/ops/alerts` + decision endpoint; time-to-respond KPI
 - [ ] Frontend: full-screen live alarm (EventSource on `/events`, Web Audio siren, Arm/Mute buttons, inspection image + pulsing floor-plan crop, override vs danger, "1 of N" queue) — _owner:_
 - [ ] Frontend `modules/ops/`: issue queue with filters, issue detail with status buttons, note box and audit timeline — _owner:_
 - [ ] Frontend: Save snapshot button, snapshot timeline chart, compare-two-snapshots table (▲/▼) — _owner:_
-- [ ] `OPS_ENABLED` flag; the other tabs still work with the module off — _owner:_
+- [x] `OPS_ENABLED` flag; the other endpoints still work with the module off
 
 ### P0: Java Live Ingest API (`ingest-api/`) ✅ built
 Plain JDK 17 with no dependencies; see [ingest-api/README.md](ingest-api/README.md). It's the only way new data gets into the lakehouse.
@@ -240,16 +240,16 @@ Plain JDK 17 with no dependencies; see [ingest-api/README.md](ingest-api/README.
 - [x] `feed --delay 8`: replays the 9 IMPROVED missions through the API as if SPOT were sending them live
 - [x] Two storage targets: Databricks Delta (Statement Execution API) or local CSVs in `data/lakehouse/` (offline fallback, same format as the kit)
 - [x] Optional `INGEST_API_KEY` for writes, and `INGEST_WEBHOOK_URL` → `/ops/ingest-hook`
-- [ ] Python backend reads the **lakehouse** (`data/lakehouse/` or Databricks), not the raw kit files in `data/kit/`, so live missions show up — _owner:_
+- [x] Python backend reads the **lakehouse** (Databricks or `data/lakehouse/`) and reloads after each live mission
 - [ ] Deploy next to the backend (Render / Railway: `javac` build, `java -cp out work.spotat.ingest.Main serve`) — _owner:_
-- [ ] Test against real Databricks once the workspace is up (only tested on the local CSV target so far) — _owner:_
+- [x] Tested against the real Databricks Free Edition workspace (`workspace.spot`)
 
 ### P1: Model Training, Testing & Efficiency Numbers
 Judges trust numbers. Shown in the Data Scientist tab.
 
-- [ ] **Split the data 80/20** (recommended over 70/30, explained below) — _owner:_
-- [ ] Train the anomaly / failure model on the training set only — _owner:_
-- [ ] Report metrics on the held-out test set → `ml/metrics.json` — _owner:_
+- [x] **Split the data 80/20** by mission — `ml/train.py`
+- [x] Train the failure-risk model on the training set only (random forest, chosen over logistic regression by CV)
+- [x] Report metrics on the held-out test set → `ml/metrics.json`; model card in `ml/MODEL_CARD.md`
 - [ ] Add a "Model performance" section to the Devpost and README — _owner:_
 
 **Why 80/20 and not 70/30:** the dataset is small (27 missions, 270 actions, 220 readings, **only 40 anomalies**). A 70/30 split leaves too few anomalies to train on, while 80/20 still leaves about 8 for testing. Use cross-validation on top of the split to get stable numbers.
@@ -286,10 +286,10 @@ Judges trust numbers. Shown in the Data Scientist tab.
 > DNS can take a while to propagate. **Do this tonight**, not at 9 AM.
 
 ### P2: Databricks Data Layer (relational + non-relational)
-- [ ] Load the CSVs into **Delta tables** with `ingest-api` (`SINK=databricks`, `seed --reset`). This is the relational layer. Only BASELINE goes in at the start; IMPROVED arrives live. — _owner:_
+- [x] Load the CSVs into **Delta tables** with `ingest-api` (`SINK=databricks`, `seed --reset`). Only BASELINE goes in at the start; IMPROVED arrives live.
 - [ ] Store `replay.ndjson` events and inspection images as **semi-structured / volume data**. This is the non-relational layer. — _owner:_
 - [ ] Run model training in a Databricks notebook and log metrics with MLflow — _owner:_
-- [ ] Backend reads from Databricks, with a **local CSV fallback** if the connection fails during the demo — _owner:_
+- [x] Backend reads from Databricks, with a **local CSV fallback** (`SINK=local`, switched by hand)
 - [ ] Add an architecture diagram to the Devpost — _owner:_
 
 > Risk: setup, auth, and cluster spin-up time. Timebox it to ~3 hours. If it isn't working by then, ship with local data and mention Databricks as planned work.
@@ -297,7 +297,7 @@ Judges trust numbers. Shown in the Data Scientist tab.
 ### P3: Stretch Polish
 - [ ] Animate SPOT walking its route across the inclined map during a mission replay — _owner:_
 - [ ] Clicking a waypoint on the map highlights the SPOT part that took that reading — _owner:_
-- [ ] Inspection images (`assets/inspection-images/`) shown in the part info panel — _owner:_
+- [ ] Inspection images (`04_ASSETS/sample_inspection_images`) shown in the part info panel — _owner:_
 
 ---
 
@@ -322,12 +322,12 @@ Each phase lists **what** gets done, **how**, and **who** works in parallel. Don
 - **Frontend / UX**: _Mock JSON copied from the API contract_
   - [ ] App shell: header, Overview / Data Scientist tabs, light theme with SPOT color variables
   - [ ] AI popup component (UI only, canned reply)
-- **Data / ML**: _Start from `tools/kit-starter/load_data.py`. Join actions → readings/anomalies → assets/locations._
-  - [ ] Load and join all CSVs into Inspection Records
-  - [ ] Save as `data/processed/records.json` (or parquet)
+- **Data / ML**: _Start from `05_STARTER_CODE/load_data.py`. Join actions → readings/anomalies → assets/locations._
+  - [x] Load and join all CSVs into Inspection Records
+  - [x] ~~Save as `data/processed/records.json`~~ not needed: records are built in memory from the lakehouse
 - **Backend / AI**: _FastAPI_
-  - [ ] Endpoints serving the contract from mock data, then real data when it lands
-  - [ ] Per-part and per-waypoint summary endpoints
+  - [x] Endpoints serving the contract from mock data, then real data when it lands
+  - [x] Per-part and per-waypoint summary endpoints
 - **Infra / Submission**: _Deploy early so deploy problems surface now, not at 8 AM_
   - [ ] Deploy a "hello world" frontend; point `spotat.work` at it + HTTPS
   - [ ] Create the Devpost draft, add all teammates, select tracks
@@ -343,22 +343,22 @@ Each phase lists **what** gets done, **how**, and **who** works in parallel. Don
   - [ ] Data Scientist tab: tables + outcome numbers + V1 vs V2
   - [ ] Wire the AI popup to `/ask` with `mode` set by the active tab
 - **Data / ML**: _scikit-learn. See the P1 model section for the split rules._
-  - [ ] 80/20 grouped split by `mission_id` (seed 42)
-  - [ ] Threshold-rule baseline, then train the model (logistic regression / random forest is enough)
-  - [ ] Compute metrics + 5-fold grouped CV → `ml/metrics.json`
+  - [x] 80/20 grouped split by `mission_id` (seed 42)
+  - [x] Threshold-rule baseline, then train the model (logistic regression / random forest is enough)
+  - [x] Compute metrics + 5-fold grouped CV → `ml/metrics.json`
 - **Backend / AI**: _Test with 5 simple and 5 technical questions_
-  - [ ] Build the document set; chunk + embed into FAISS/Chroma
-  - [ ] `/ask`: retrieve → LLM with a simple or technical system prompt → answer with cited IDs
-  - [ ] `/metrics` endpoint serving `metrics.json`
+  - [x] Build the document set; index with TF-IDF (no embedding service needed at this size)
+  - [x] `/ask`: retrieve → LLM with a simple or technical system prompt → answer with cited IDs
+  - [x] `/metrics` endpoint serving `metrics.json`
 
 🔒 **Gate (~midnight):** full core demo works on `spotat.work`: click a SPOT part → see its data → switch floors → ask the AI → switch to the Data Scientist tab.
 
 ### Phase 3: Secondary Tracks (midnight → 5 AM)
-- [ ] Backend: **Operator Console** `/ops/*` + `ops.db` + seeded snapshots. It only needs Phase 1's Inspection Records, so it can start as soon as that gate passes.
+- [x] Backend: **Operator Console** `/ops/*` + `ops.db` + seeded snapshots
 - [ ] Frontend: Operator tab: issue queue → resolve with a note → save a snapshot → compare with the earlier one
 - [ ] Frontend: **Generate PDF** in the Data Scientist tab (exports a snapshot)
 - [ ] Frontend: model metrics panel + confusion matrix in the Data Scientist tab
-- [ ] AI: pass the selected part / floor / waypoint as context; add the "I don't have data on that" guardrail
+- [x] AI: backend accepts the selected part / floor / waypoint as `context`, and has the guardrail (frontend still has to send `context`)
 - [ ] Infra: Databricks Delta tables + MLflow, backend reading from it. **If it isn't working by 3 AM, cut it.**
 - [ ] 3D: stretch polish (SPOT walking the route, waypoint ↔ part highlighting). **If it isn't working by 4 AM, cut it.**
 - [ ] Everyone: fix bugs found while running the demo flow
@@ -376,7 +376,7 @@ Each phase lists **what** gets done, **how**, and **who** works in parallel. Don
 
 ### Phase 5: Go Public (10 AM → 11 AM)
 - [ ] Scan history for secrets (`git log -p | grep -iE "key|token|secret"`) and rotate anything that leaked
-- [ ] Remove `.DS_Store` files; make sure `.env` isn't committed
+- [x] Remove `.DS_Store` files; make sure `.env` isn't committed
 - [ ] Final commits pushed
 - [ ] **Make the repo public** and open the Devpost repo link in a logged-out browser
 - [ ] **11:00 AM: ✅ Final commit + public repo**

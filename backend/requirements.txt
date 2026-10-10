@@ -1,0 +1,14 @@
+# Python 3.11+. One virtualenv serves the backend and ml/ (training + Hugging Face publishing).
+fastapi==0.143.0
+uvicorn==0.54.0
+httpx==0.28.1
+python-dotenv==1.2.4
+# The model file is a pickle: keep scikit-learn at the version it was trained with (see ml/metrics.json).
+scikit-learn==1.9.1
+numpy==2.5.3
+joblib==1.6.0
+pypdf==6.20.0
+anthropic==1.13.0
+huggingface_hub==2.2.0
+# Tests
+pytest==9.1.1

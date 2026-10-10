@@ -1,6 +1,6 @@
-# Runbook: Databricks + Ingest API
+# Runbook: Databricks + Ingest API + Backend
 
-Every command needed to set up, check, demo and reset the live-data pipeline. Commands are for **Windows PowerShell**. On macOS/Linux, use `./run.sh` instead of `.\run.ps1`, `cp` instead of `Copy-Item`, and `curl` instead of `curl.exe`.
+Every command needed to set up, check, demo and reset the live-data pipeline and the Python backend. Commands are for **Windows PowerShell**. On macOS/Linux, use `./run.sh` instead of `.\run.ps1`, `cp` instead of `Copy-Item`, `curl` instead of `curl.exe`, and `.venv/bin/` instead of `.venv\Scripts\`.
 
 All commands run from the `ingest-api` folder unless a step says otherwise.
 
@@ -94,6 +94,53 @@ Each live mission prints an `event: mission_ingested` line with its `alerts`. Th
 
 ---
 
+## 2b. Run the backend (Python)
+
+### One-time setup (from the repo root)
+```powershell
+cd C:\_MonishaN\CS\PROJECTS\Spot-Mission-Dashboard
+python -m venv .venv
+.venv\Scripts\pip install -r backend\requirements.txt
+Copy-Item backend\.env.example backend\.env
+code backend\.env
+```
+In `backend\.env` set at least:
+```
+OPS_PIN=<a PIN for operator sign-in>
+OPS_SECRET=<any long random string>
+INGEST_API_KEY=<random string, same as below>
+ANTHROPIC_API_KEY=<optional; without a key the assistant lists matching records instead>
+```
+The backend reads the Databricks values from `ingest-api\.env`, so don't copy them.
+
+Connect the two services by adding to **`ingest-api\.env`**:
+```
+INGEST_API_KEY=<the same random string>
+INGEST_WEBHOOK_URL=http://localhost:8000/ops/ingest-hook
+```
+Restart `serve` (Terminal 1) after changing `ingest-api\.env`.
+
+### Check it
+```powershell
+cd backend
+..\.venv\Scripts\python manage.py check
+```
+Expected: `source databricks workspace.spot`, `rows ... missions=18 ...`, `risk model loaded (random_forest)`.
+
+### Terminal 4: start the backend
+```powershell
+cd C:\_MonishaN\CS\PROJECTS\Spot-Mission-Dashboard\backend
+..\.venv\Scripts\python -m uvicorn app.main:create_app --factory --port 8000
+```
+Open http://localhost:8000/docs to try every endpoint. Quick checks:
+```powershell
+curl.exe http://localhost:8000/health
+curl.exe http://localhost:8000/ops/snapshots
+```
+`/health` should show `"missions":18`; `/ops/snapshots` should list 7 `Baseline through 2026-09-0X` snapshots.
+
+---
+
 ## 3. Demo: stream the IMPROVED missions in
 
 In Terminal 2:
@@ -122,15 +169,32 @@ GROUP BY scenario;
 ```
 Expected: `BASELINE 77.2`, `IMPROVED 91.1`.
 
+If the backend is running, each mission reaches it within seconds:
+```powershell
+curl.exe "http://localhost:8000/ops/alerts"
+curl.exe "http://localhost:8000/ops/snapshots"
+```
+Expected after the feed: 5 alarms waiting for a decision (AN014 CRITICAL first), and one `After M0xx arrived (live)` snapshot per mission.
+
+To answer an alarm from the command line (the dashboard does this with buttons):
+```powershell
+$t = (Invoke-RestMethod -Method Post http://localhost:8000/ops/login -ContentType application/json -Body '{"name":"Dana","role":"operator","pin":"<OPS_PIN>"}').token
+Invoke-RestMethod -Method Post http://localhost:8000/ops/alerts/AN014/decision -Headers @{Authorization="Bearer $t"} -ContentType application/json -Body '{"decision":"DANGER","note":"sending a tech"}'
+```
+
 ---
 
 ## 4. Reset before every rehearsal and the real demo
 
-Stop the server (Ctrl+C in Terminal 1), then:
+Stop both servers (Ctrl+C in Terminals 1 and 4), then:
 ```powershell
 .\run.ps1 seed --reset
+cd ..\backend
+..\.venv\Scripts\python manage.py reset-ops
+cd ..\ingest-api
 .\run.ps1 serve
 ```
+Then start the backend again (Terminal 4). `reset-ops` deletes the Operator Console database (issues, decisions, snapshots); the backend rebuilds it from the baseline data on start.
 
 **One minute before presenting**, run any query in the Databricks SQL Editor to wake the warehouse:
 ```sql
@@ -147,7 +211,7 @@ $env:SINK = "local"
 .\run.ps1 seed --reset
 .\run.ps1 serve
 ```
-Each new terminal needs `$env:SINK = "local"` again. To go back to Databricks:
+Each new terminal needs `$env:SINK = "local"` again, including the backend's (it follows `SINK`). To go back to Databricks:
 ```powershell
 Remove-Item Env:SINK
 ```
@@ -177,6 +241,11 @@ Remove-Item Env:SINK
 | `kit data folder not found` | Run from the `ingest-api` folder, or set `KIT_DATA_DIR` to the `data/kit` folder. |
 | `M0xx already in the lakehouse, skipped` | Expected after a feed. Run `seed --reset` to start over. |
 | `javac` is not recognized | Install a JDK (step 1.1). A JRE alone can't compile. |
+| Backend: `sign-in is disabled until OPS_PIN is set` | Set `OPS_PIN` in `backend\.env` and restart the backend. |
+| Backend: alarms never appear / no `After M0xx` snapshots | `INGEST_WEBHOOK_URL` or `INGEST_API_KEY` missing or different in the two `.env` files; restart `serve` after fixing. |
+| Backend: `lakehouse unavailable` (HTTP 503) | Databricks unreachable or warehouse asleep. Wake it, then `curl.exe -X POST http://localhost:8000/admin/refresh`. |
+| Backend: assistant answers "Here's what I found in the data" | No LLM configured (or the call failed: see `llm_error` in the response). Set `ANTHROPIC_API_KEY` or `HF_TOKEN`. |
+| Backend: `model was trained with scikit-learn X` warning | Reinstall with `pip install -r backend\requirements.txt`, or retrain with `python ml\train.py`. |
 
 ---
 
@@ -188,3 +257,16 @@ Remove-Item Env:SINK
    ```powershell
    git log --all -p | Select-String "dapi"
    ```
+
+---
+
+## 9. Retrain and publish the risk model (Hugging Face)
+
+From the repo root:
+```powershell
+.venv\Scripts\python ml\train.py                    # rewrites ml\model.joblib + ml\metrics.json (seed 42, same result each run)
+.venv\Scripts\hf auth login                         # once: paste a Hugging Face token with WRITE access
+.venv\Scripts\python ml\push_to_hub.py --dry-run    # writes ml\MODEL_CARD.md to review, uploads nothing
+.venv\Scripts\python ml\push_to_hub.py              # creates <username>/spot-action-failure-risk (public) and uploads
+```
+The token from `hf auth login` is stored in your user profile, not in the repo. The app always loads its local `ml\model.joblib`; it never downloads from the Hub.

@@ -138,11 +138,12 @@ final class ApiServer {
         Map<String, Object> event = new LinkedHashMap<>();
         event.put("event", "mission_ingested");
         event.putAll(body);
-        HttpRequest request = HttpRequest.newBuilder(webhook)
+        HttpRequest.Builder request = HttpRequest.newBuilder(webhook)
                 .header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString(Json.write(event)))
-                .build();
-        http.sendAsync(request, HttpResponse.BodyHandlers.discarding()).whenComplete((response, error) -> {
+                .POST(HttpRequest.BodyPublishers.ofString(Json.write(event)));
+        // The backend checks the same shared key, so only this service can raise alarms there.
+        if (!apiKey.isEmpty()) request.header("X-API-Key", apiKey);
+        http.sendAsync(request.build(), HttpResponse.BodyHandlers.discarding()).whenComplete((response, error) -> {
             if (error != null) Main.log("webhook failed: " + error.getMessage());
             else if (response.statusCode() >= 300) Main.log("webhook returned HTTP " + response.statusCode());
         });

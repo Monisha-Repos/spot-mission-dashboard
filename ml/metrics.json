@@ -1,0 +1,176 @@
+{
+  "model": "spot-action-failure-risk",
+  "model_type": "random_forest",
+  "trained_at": "2026-10-10T17:03:45+00:00",
+  "sklearn_version": "1.9.1",
+  "target": "Will this action fail? (actions.status == FAILED), predicted before the action runs",
+  "features": {
+    "categorical": [
+      "action_type",
+      "location_id",
+      "environment",
+      "zone_type",
+      "asset_type",
+      "asset_criticality",
+      "configuration_version"
+    ],
+    "numeric": [
+      "battery_pct",
+      "sequence",
+      "floor"
+    ]
+  },
+  "data": {
+    "source": "Knight Hacks 2026 SPOT challenge kit (synthetic)",
+    "actions": 270,
+    "missions": 27,
+    "failures": 49,
+    "failure_rate": 0.1815
+  },
+  "split": {
+    "method": "80/20 by mission (StratifiedGroupKFold, stratified on scenario x outcome), seed 42",
+    "train_missions": [
+      "M001",
+      "M002",
+      "M003",
+      "M006",
+      "M007",
+      "M008",
+      "M009",
+      "M011",
+      "M012",
+      "M013",
+      "M014",
+      "M015",
+      "M017",
+      "M018",
+      "M019",
+      "M020",
+      "M021",
+      "M022",
+      "M023",
+      "M024",
+      "M025",
+      "M026"
+    ],
+    "test_missions": [
+      "M004",
+      "M005",
+      "M010",
+      "M016",
+      "M027"
+    ],
+    "train_actions": 220,
+    "test_actions": 50,
+    "test_failures": 9
+  },
+  "cross_validation": {
+    "method": "5-fold StratifiedGroupKFold on the training set",
+    "candidates": {
+      "logistic_regression": {
+        "pr_auc_mean": 0.4547,
+        "pr_auc_std": 0.0961,
+        "f1_mean": 0.4097,
+        "f1_std": 0.0742,
+        "threshold": 0.4572
+      },
+      "random_forest": {
+        "pr_auc_mean": 0.5053,
+        "pr_auc_std": 0.1293,
+        "f1_mean": 0.4438,
+        "f1_std": 0.1753,
+        "threshold": 0.5133
+      }
+    },
+    "selected": "random_forest",
+    "selected_by": "highest mean PR-AUC"
+  },
+  "decision_threshold": 0.5133,
+  "test": {
+    "precision": 0.4444,
+    "recall": 0.4444,
+    "f1": 0.4444,
+    "accuracy": 0.8,
+    "confusion_matrix": {
+      "true_negative": 36,
+      "false_positive": 5,
+      "false_negative": 5,
+      "true_positive": 4
+    },
+    "pr_auc": 0.3247,
+    "roc_auc": 0.6694
+  },
+  "baselines": {
+    "battery_rule": {
+      "rule": "flag when battery_pct <= 32",
+      "precision": 0.3636,
+      "recall": 0.4444,
+      "f1": 0.4,
+      "accuracy": 0.76,
+      "confusion_matrix": {
+        "true_negative": 34,
+        "false_positive": 7,
+        "false_negative": 5,
+        "true_positive": 4
+      },
+      "pr_auc": 0.2616,
+      "roc_auc": 0.6369
+    },
+    "always_predict_success": {
+      "accuracy": 0.82,
+      "recall": 0.0,
+      "f1": 0.0
+    }
+  },
+  "feature_importance": [
+    {
+      "feature": "battery_pct",
+      "importance": 0.0518
+    },
+    {
+      "feature": "configuration_version",
+      "importance": 0.0063
+    },
+    {
+      "feature": "location_id",
+      "importance": 0.0031
+    },
+    {
+      "feature": "asset_type",
+      "importance": 0.002
+    },
+    {
+      "feature": "environment",
+      "importance": -0.001
+    },
+    {
+      "feature": "asset_criticality",
+      "importance": -0.0075
+    },
+    {
+      "feature": "floor",
+      "importance": -0.0082
+    },
+    {
+      "feature": "zone_type",
+      "importance": -0.0083
+    },
+    {
+      "feature": "sequence",
+      "importance": -0.0122
+    },
+    {
+      "feature": "action_type",
+      "importance": -0.1015
+    }
+  ],
+  "mean_predicted_risk_by_configuration": {
+    "V1": 0.3799,
+    "V2": 0.2094
+  },
+  "inference_latency_ms": {
+    "single_action": 20.77,
+    "per_action_in_a_batch": 0.098
+  },
+  "shipped_model": "refit on all missions with the selected settings; test numbers above are from the held-out split"
+}

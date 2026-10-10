@@ -107,13 +107,13 @@ Every SPOT reading becomes an **Inspection Record**:
 
 | Layer | Technology |
 |---|---|
-| Backend / data processing | Python |
-| API | _TBD_ |
-| Frontend | _TBD_ |
-| Real-time updates | _TBD_ |
-| Visualization | _TBD_ |
-
-> Fill this in as the stack is finalized.
+| Lakehouse | Databricks Delta tables (Free Edition), local CSV fallback |
+| Live ingestion | Java 17 ingest API (JDK only), Server-Sent Events for live alarms |
+| Backend API | Python, FastAPI ([backend/](backend/)) |
+| Operator Console storage | SQLite with an append-only audit trail |
+| ML model | scikit-learn random forest ([ml/](ml/)), published on the Hugging Face Hub |
+| AI assistant | TF-IDF retrieval + Claude (Anthropic API) or Hugging Face Inference |
+| Frontend | _TBD_ (planned: React + Vite + React Three Fiber) |
 
 ## Getting Started
 
@@ -129,6 +129,8 @@ cd Spot-Mission-Dashboard
 
 ```
 ├── ingest-api/              Java live-data API → Databricks lakehouse (see RUNBOOK.md)
+├── backend/                 Python API: records, insights, AI assistant, risk model, Operator Console
+├── ml/                      failure-risk model: train.py, model.joblib, metrics.json, model card
 ├── data/
 │   ├── kit/                 challenge data: CSVs, replay.ndjson, data dictionary
 │   └── lakehouse/           offline lakehouse written by ingest-api (git-ignored)
@@ -156,17 +158,17 @@ _Screenshots, a demo video, and a walkthrough of a sample mission go here._
 ## Roadmap
 
 - [ ] Ingest NextEra-provided SPOT mission data
-- [ ] Normalize data into the Inspection Record schema
+- [x] Normalize data into the Inspection Record schema
 - [ ] Plant map with SPOT position and route
 - [ ] Inspection cards with readings, timestamps, and evidence
-- [ ] Threshold-based anomaly flags
-- [ ] Historical baseline and trend comparison
-- [ ] Plain-language explanations and recommended actions
-- [ ] Real-time mission streaming (live or simulated)
+- [x] Threshold-based anomaly flags
+- [x] Historical baseline and trend comparison
+- [x] Plain-language explanations and recommended actions
+- [x] Real-time mission streaming (live or simulated)
 - [ ] Post-mission summary report and export
-- [ ] Operator feedback on flags (confirmed / false alarm)
-- [ ] Operator Console: issue workflow with an audit trail
-- [ ] Performance snapshots + historical comparison
+- [x] Operator feedback on flags (confirmed / false alarm)
+- [x] Operator Console: issue workflow with an audit trail
+- [x] Performance snapshots + historical comparison
 
 ## Why This Wins for Operators
 

@@ -225,3 +225,8 @@ data/lakehouse/
 
 # macOS folder metadata
 .DS_Store
+
+# Operator Console database (issues, audit trail, snapshots)
+data/ops.db
+data/ops.db-wal
+data/ops.db-shm
