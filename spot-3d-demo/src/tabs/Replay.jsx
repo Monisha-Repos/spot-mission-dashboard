@@ -370,12 +370,16 @@ export default function Replay({ missionId, onMission }) {
   useEffect(() => {
     if (!playing || !tl) return undefined;
     let raf, last = performance.now();
+    // Where playback resumed from: a finding we're already paused on must not stop us again.
+    const from = atRef.current;
     const tick = now => {
       const prev = atRef.current;
-      let next = Math.min(prev + (now - last) * speed, duration);
-      last = now;
+      // rAF timestamps are frame-start times and can be earlier than `last`; never step backwards.
+      const dt = Math.max(0, now - last);
+      let next = Math.min(prev + dt * speed, duration);
+      last = Math.max(last, now);
       let stop = next >= duration;
-      const f = pauseOnFindings ? nextFindingAfter(tl, prev) : null;
+      const f = pauseOnFindings ? nextFindingAfter(tl, Math.max(prev, from)) : null;
       if (f && next >= f.revealAt) { next = f.revealAt; stop = true; }
       setAt(next);
       if (stop) setPlaying(false);
