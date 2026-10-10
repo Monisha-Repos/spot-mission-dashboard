@@ -149,7 +149,7 @@ _Screenshots, a demo video, and a walkthrough of a sample mission go here._
 
 ## Acknowledgments
 
-- **NextEra Energy** for the challenge and the SPOT mission data resources
+- **NextEra Energy** for the challenge and the SPOT mission data resources.
 - **Boston Dynamics** for SPOT
 
 ## Team
