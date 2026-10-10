@@ -229,6 +229,9 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 .hero-copy { position: absolute; top: 40px; left: var(--gutter); z-index: 3; max-width: 440px; pointer-events: none; }
 .hero-copy > * { pointer-events: auto; }
 .hero-copy .lead { margin-top: 16px; font-size: 16px; }
+.mission-facts { display: flex; flex-wrap: wrap; margin-top: 4px; font-size: 13px; color: var(--muted); }
+.mission-facts span { white-space: nowrap; }
+.mission-facts span + span::before { content: "·"; margin: 0 8px; color: var(--muted); }
 .part-picker { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 20px; }
 .part-picker .chip { background: var(--surface); color: var(--text); }
 .part-picker .chip[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); }

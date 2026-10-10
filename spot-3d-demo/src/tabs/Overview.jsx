@@ -143,10 +143,19 @@ export default function Overview({ theme, context, setContext, onReplay }) {
             />
           </Suspense>
           <div className="hero-copy">
-            <p className="eyebrow">Autonomous inspection · Spot</p>
+            <p className="eyebrow">Autonomous inspection</p>
             <h1>Spot at work</h1>
             <p className="lead">{summary.data?.latest_mission
-              ? <>Latest mission <strong>{summary.data.latest_mission.mission_id}</strong> ({summary.data.latest_mission.configuration_version}): {summary.data.latest_mission.headline}.</>
+              ? <>
+                  Latest mission <strong>{summary.data.latest_mission.mission_id}</strong> ({summary.data.latest_mission.configuration_version})
+                  <span className="mission-facts">
+                    {summary.data.latest_mission.headline.split('·').map(part => {
+                      const text = part.trim();
+                      const urgent = text.includes('need action') && parseInt(text, 10) > 0;
+                      return <span key={text} className={urgent ? 'tone-bad' : undefined}>{text}</span>;
+                    })}
+                  </span>
+                </>
               : 'Click a part of the robot to see what it measured.'}</p>
             {summary.data?.latest_mission && onReplay && (
               <button type="button" className="btn btn-accent btn-sm hero-replay" onClick={() => onReplay(summary.data.latest_mission.mission_id)}>
