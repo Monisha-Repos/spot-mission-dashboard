@@ -11,16 +11,17 @@
   display: block; padding: 0; border: 0; background: none;
   color: var(--text, #fff); cursor: pointer; font: inherit;
 }
-.hotspot { --signal: #1ec8ff; --signal-halo: rgba(30, 200, 255, .35); }
+/* Colours come from the page theme (--signal / --signal-halo); these are the fallbacks when it sets none. */
+.hotspot-dot { --signal-c: var(--signal, #1ec8ff); --signal-h: var(--signal-halo, rgba(30, 200, 255, .35)); }
 .hotspot-dot {
   position: relative; display: block; width: 12px; height: 12px; border-radius: 50%;
-  background: var(--signal);
-  box-shadow: 0 0 6px var(--signal-halo);
+  background: var(--signal-c);
+  box-shadow: 0 0 6px var(--signal-h);
 }
 /* One soft halo breathing out from the dot. */
 .hotspot-dot::after {
   content: ''; position: absolute; inset: 0; border-radius: 50%; pointer-events: none;
-  background: var(--signal-halo);
+  background: var(--signal-h);
   animation: hotspot-halo 3s ease-out infinite;
 }
 @keyframes hotspot-halo {
@@ -41,7 +42,7 @@
 /* Hovered or selected: the halo stops and a steady ring takes its place. */
 .hotspot:hover .hotspot-dot::after, .hotspot.is-active .hotspot-dot::after { animation: none; opacity: 0; }
 .hotspot:hover .hotspot-dot, .hotspot.is-active .hotspot-dot, .hotspot:focus-visible .hotspot-dot {
-  outline: 2px solid var(--signal); outline-offset: 3px;
+  outline: 2px solid var(--signal-c); outline-offset: 3px;
 }
 .hotspot.is-active .hotspot-dot { width: 14px; height: 14px; }
 .hotspot:focus-visible { outline: none; }
