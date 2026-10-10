@@ -15,6 +15,8 @@ cp .env.example .env          # optional; defaults work offline
 
 On Windows PowerShell, use `.\run.ps1` with the same arguments.
 
+**Step-by-step setup with Databricks, checks, demo, reset and troubleshooting: see [RUNBOOK.md](RUNBOOK.md).**
+
 Run `seed --reset` again before each demo run to go back to baseline only. On Databricks, seeding takes about 3 minutes and each live mission takes about 8 seconds to write.
 
 ## Endpoints
