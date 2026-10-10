@@ -53,7 +53,7 @@ def test_waypoints_parts_assets(client):
     assert len(wps) == 15 and all(w["status"] in {"normal", "watch", "action"} for w in wps)
     assert len(client.get("/waypoints?floor=2").json()) == 5
     parts = {p["id"]: p for p in client.get("/parts").json()}
-    assert set(parts) == {"thermal_camera", "ptz_camera", "microphone", "legs_and_body_cameras", "radio", "battery"}
+    assert set(parts) == {"thermal_camera", "ptz_camera", "microphone", "legs_and_body_cameras", "lidar", "radio", "battery"}
     assert "TEMPERATURE_C" in parts["thermal_camera"]["readings"]
     assert parts["battery"]["by_battery_level"][0]["battery"] == "under 30%"
     asset = client.get("/assets/HX-204").json()

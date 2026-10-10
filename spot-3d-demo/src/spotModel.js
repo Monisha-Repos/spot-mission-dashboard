@@ -1,124 +1,93 @@
 import * as THREE from 'three';
 
-// Original, stylized geometry inspired by Spot. No downloaded meshes or textures.
+// Wraps the Spot CAM+IR mesh from assets/spot-inspection.glb (loaded by the caller) and makes its legs posable.
 // Units: meters. +X is forward, +Y is up, +Z is the robot's left.
-export function createSpotModel() {
+// The file has one rigid node per leg, so each leg is split at the knee here. Points are in the leg's own frame
+// (hip at the origin), measured from the file: the knee joint cap and the centre of the rubber foot.
+const KNEE = new THREE.Vector2(-0.208, -0.275);
+const FOOT = new THREE.Vector2(0.01, -0.622);
+/** Height of the foot centre above the floor when the sole is touching it. */
+export const FOOT_CLEARANCE = 0.027;
+const HIP_X = 0.397;          // hips sit ±HIP_X along the body
+const HIP_Y = 0.676 - 0.026;  // hip height in the file (leg node + scene offset), i.e. standing height
+const STAND = 0.65, SIT = 0.33;
+const LEGS = { Front_left_leg: [true, 1], Front_right_leg: [true, -1], Rear_left_leg: [false, 1], Rear_right_leg: [false, -1] };
+
+const L1 = KNEE.length();
+const L2 = FOOT.clone().sub(KNEE).length();
+const REST_UPPER = Math.atan2(KNEE.y, KNEE.x);
+const REST_LOWER = Math.atan2(FOOT.y - KNEE.y, FOOT.x - KNEE.x);
+
+const tmpA = new THREE.Vector2(), tmpB = new THREE.Vector2();
+function segmentDistance(p, a, b) {
+  const ab = tmpA.copy(b).sub(a);
+  const t = Math.max(0, Math.min(1, tmpB.copy(p).sub(a).dot(ab) / ab.lengthSq()));
+  return p.distanceTo(tmpB.copy(a).addScaledVector(ab, t));
+}
+
+/** Moves a leg's meshes under `upper` (hip to knee) and `knee` (knee to foot), splitting any mesh that spans both. */
+function splitLeg(leg, upper, knee) {
+  const origin = new THREE.Vector2();
+  const isLower = p => segmentDistance(p, KNEE, FOOT) < segmentDistance(p, origin, KNEE);
+  for (const mesh of [...leg.children]) {
+    if (!mesh.isMesh) continue;
+    mesh.updateMatrix();
+    const geometry = mesh.geometry.clone().applyMatrix4(mesh.matrix);
+    mesh.geometry.dispose();
+    const pos = geometry.attributes.position;
+    const index = geometry.index ? Array.from(geometry.index.array) : [...Array(pos.count).keys()];
+    const parts = { upper: [], lower: [] };
+    const c = new THREE.Vector2();
+    for (let i = 0; i < index.length; i += 3) {
+      c.set(0, 0);
+      for (let k = 0; k < 3; k++) c.x += pos.getX(index[i + k]) / 3, c.y += pos.getY(index[i + k]) / 3;
+      parts[isLower(c) ? 'lower' : 'upper'].push(index[i], index[i + 1], index[i + 2]);
+    }
+    // Small stray bits (a cover lip near the knee) follow the rest of their mesh rather than tearing it.
+    const share = parts.lower.length / index.length;
+    if (share < 0.15) parts.upper = index, parts.lower = [];
+    else if (share > 0.85) parts.lower = index, parts.upper = [];
+    for (const [side, ids] of Object.entries(parts)) {
+      if (!ids.length) continue;
+      const g = geometry.clone();
+      g.setIndex(ids);
+      if (side === 'lower') g.translate(-KNEE.x, -KNEE.y, 0);
+      const m = new THREE.Mesh(g, mesh.material);
+      m.name = mesh.name;
+      (side === 'lower' ? knee : upper).add(m);
+    }
+    geometry.dispose();
+    mesh.removeFromParent();
+  }
+}
+
+/** `scene` is the loaded glTF scene; it becomes part of the returned model. */
+export function createSpotModel(scene) {
   const root = new THREE.Group();
   root.name = 'Spot';
   const body = new THREE.Group();
   body.name = 'body';
   root.add(body);
-  const geometries = new Set();
-  const materials = {};
-  const material = (name, color, roughness = 0.65, metalness = 0.05) => {
-    materials[name] = new THREE.MeshStandardMaterial({ color, roughness, metalness });
-    return materials[name];
-  };
-  // Matte finish like the real robot: yellow shells, black actuators and payload rail, no shiny trim.
-  material('yellow', '#f4c20d', 0.58, 0);
-  material('dark', '#1d2022', 0.7, 0.05);
-  material('mesh', '#34383b', 0.85, 0.05);
-  material('rubber', '#121416', 0.95);
-  material('lens', '#0e1a20', 0.15, 0.5);
-  material('glass', '#2c4a56', 0.2, 0.3);
-  material('led', '#99d8b1');
-  materials.led.emissive.set('#397852');
-  material('ledWhite', '#ffffff');
-  materials.ledWhite.emissive.set('#f2f6ff');
-  material('ledAmber', '#ffb347');
-  materials.ledAmber.emissive.set('#ff7a00');
-
-  const box = new THREE.BoxGeometry(1, 1, 1);
-  const cylinder = new THREE.CylinderGeometry(1, 1, 1, 12);
-  const sphere = new THREE.SphereGeometry(1, 12, 8);
-  [box, cylinder, sphere].forEach(g => geometries.add(g));
-  function mesh(parent, geometry, mat, position, scale, name = '') {
-    const m = new THREE.Mesh(geometry, materials[mat]);
-    m.position.set(...position);
-    m.scale.set(...scale);
-    m.name = name;
-    parent.add(m);
-    return m;
-  }
-  function block(parent, mat, position, scale, name) {
-    return mesh(parent, box, mat, position, scale, name);
-  }
-  function axle(parent, mat, position, radius, depth, axis = 'z') {
-    const m = mesh(parent, cylinder, mat, position, [radius, depth, radius]);
-    if (axis === 'z') m.rotation.x = Math.PI / 2;
-    if (axis === 'x') m.rotation.z = Math.PI / 2;
-    return m;
-  }
-  // Beveled panel: one small extrusion shared by the shell and yellow limb covers.
-  const shape = new THREE.Shape();
-  shape.moveTo(-0.45, -0.5);
-  shape.lineTo(0.45, -0.5);
-  shape.lineTo(0.5, -0.28);
-  shape.lineTo(0.5, 0.28);
-  shape.lineTo(0.43, 0.5);
-  shape.lineTo(-0.43, 0.5);
-  shape.lineTo(-0.5, 0.28);
-  shape.lineTo(-0.5, -0.28);
-  shape.closePath();
-  const panel = new THREE.ExtrudeGeometry(shape, { depth: 0.94, bevelEnabled: true, bevelThickness: 0.03, bevelSize: 0.025, bevelSegments: 1, steps: 1 });
-  panel.translate(0, 0, -0.47);
-  geometries.add(panel);
-
-  mesh(body, panel, 'yellow', [0, 0.015, 0], [0.98, 0.21, 0.34], 'main-shell');
-  mesh(body, panel, 'dark', [0, -0.072, 0], [0.94, 0.105, 0.29], 'underbody');
-  // Top: black payload deck with two low mounting rails.
-  mesh(body, panel, 'dark', [-0.02, 0.127, 0], [0.69, 0.035, 0.285], 'top-deck');
-  for (const z of [-0.1, 0.1]) block(body, 'dark', [-0.03, 0.152, z], [0.62, 0.012, 0.022]);
-  for (const side of [-1, 1]) {
-    // Side stereo camera: a small black window toward the rear, and a black vent strip along the lower edge.
-    mesh(body, panel, 'dark', [-0.2, 0.03, side * 0.168], [0.17, 0.05, 0.03], 'side-camera-window');
-    for (const x of [-0.255, -0.222]) axle(body, 'lens', [x, 0.03, side * 0.184], 0.009, 0.004);
-    block(body, 'glass', [-0.16, 0.03, side * 0.184], [0.05, 0.016, 0.003]);
-    block(body, 'mesh', [0.1, -0.03, side * 0.171], [0.46, 0.018, 0.006], 'side-vent');
-    // Heat-sink fins on the black belly.
-    for (let i = 0; i < 9; i++) block(body, 'mesh', [-0.3 + i * 0.07, -0.095, side * 0.136], [0.012, 0.03, 0.006]);
-  }
-  // Front: yellow bezel around a recessed black face with a centre mesh grille and a camera column either side,
-  // thin light strips on the bezel and an amber light underneath.
-  block(body, 'dark', [0.512, 0.012, 0], [0.012, 0.118, 0.218], 'front-face');
-  block(body, 'mesh', [0.519, 0.008, 0], [0.003, 0.092, 0.05], 'front-grille');
-  for (let i = 0; i < 9; i++) block(body, 'dark', [0.521, -0.03 + i * 0.0095, 0], [0.002, 0.0025, 0.05]);
-  axle(body, 'lens', [0.52, 0.035, -0.06], 0.016, 0.006, 'x');
-  for (const y of [0.005, -0.03]) block(body, 'glass', [0.52, y, -0.06], [0.003, 0.02, 0.026]);
-  for (const y of [0.04, 0.016, -0.008]) axle(body, 'lens', [0.52, y, 0.06], 0.009, 0.006, 'x');
-  block(body, 'glass', [0.52, -0.036, 0.06], [0.003, 0.018, 0.026]);
-  for (const z of [-0.128, 0.128]) block(body, 'ledWhite', [0.515, 0.012, z], [0.004, 0.072, 0.005], 'light-strip');
-  block(body, 'ledAmber', [0.49, -0.088, 0], [0.012, 0.012, 0.07], 'status-light');
-  // Rear: plain panel with a status light (no camera "eyes", so the back doesn't read as a face).
-  mesh(body, panel, 'dark', [-0.498, 0, 0], [0.026, 0.133, 0.274], 'rear-panel');
-  block(body, 'led', [-0.516, 0.029, 0.084], [0.009, 0.014, 0.037]);
+  // Hips end up at the body origin, so the body's height is the hip height.
+  scene.position.y = -HIP_Y;
+  body.add(scene);
 
   const legs = [];
-  for (const front of [true, false]) for (const side of [-1, 1]) {
-    const leg = new THREE.Group();
-    leg.name = `${front ? 'front' : 'rear'}-${side > 0 ? 'left' : 'right'}`;
-    leg.position.set(front ? 0.355 : -0.355, -0.047, side * 0.211);
-    body.add(leg);
-    // Black hip actuator under a chunky yellow thigh cover.
-    axle(leg, 'dark', [0, 0, 0], 0.085, 0.12);
-    axle(leg, 'mesh', [0, 0, side * 0.064], 0.06, 0.012);
+  for (const [name, [front, side]] of Object.entries(LEGS)) {
+    const hip = scene.getObjectByName(name);
     const upper = new THREE.Group();
-    upper.name = `${leg.name}-hip`;
-    upper.position.z = side * 0.067;
-    leg.add(upper);
-    mesh(upper, panel, 'yellow', [0, -0.14, 0], [0.12, 0.33, 0.072]);
-    block(upper, 'dark', [-0.05, -0.16, -side * 0.028], [0.022, 0.24, 0.036]);
+    upper.name = `${name}-hip`;
     const knee = new THREE.Group();
-    knee.name = `${leg.name}-knee`;
-    knee.position.y = -0.32;
+    knee.name = `${name}-knee`;
+    knee.position.set(KNEE.x, KNEE.y, 0);
+    splitLeg(hip, upper, knee);
+    const foot = new THREE.Object3D();
+    foot.name = `${name}-foot`;
+    foot.position.set(FOOT.x - KNEE.x, FOOT.y - KNEE.y, 0);
+    knee.add(foot);
     upper.add(knee);
-    // Slim black lower leg that forks near the foot, ending in a rubber foot.
-    axle(knee, 'dark', [0, 0, 0], 0.05, 0.08);
-    mesh(knee, panel, 'dark', [0, -0.13, 0], [0.04, 0.27, 0.034]);
-    const fork = block(knee, 'dark', [0.014, -0.262, 0], [0.008, 0.085, 0.026]);
-    fork.rotation.z = -0.28;
-    const foot = mesh(knee, sphere, 'rubber', [0, -0.32, 0], [0.042, 0.036, 0.04], `${leg.name}-foot`);
-    legs.push({ hip: leg, upper, knee, foot, front, side });
+    hip.add(upper);
+    legs.push({ hip, upper, knee, foot, front, side });
   }
 
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -134,38 +103,47 @@ export function createSpotModel() {
     const s = clamp(sit ?? (stance === 'sit' ? 1 : 0), 0, 1);
     // Like the real robot, the rear goes down first and comes up last; the front follows.
     const legSit = { rear: ease(clamp(s / 0.65, 0, 1)), front: ease(clamp((s - 0.35) / 0.65, 0, 1)) };
-    const height = { rear: lerp(0.67, 0.33, legSit.rear) + bodyHeight, front: lerp(0.67, 0.33, legSit.front) + bodyHeight };
-    const pitch = Math.atan2(height.front - height.rear, 0.71);
+    const height = { rear: lerp(STAND, SIT, legSit.rear) + bodyHeight, front: lerp(STAND, SIT, legSit.front) + bodyHeight };
+    const pitch = Math.asin(clamp((height.front - height.rear) / (2 * HIP_X), -1, 1));
     body.position.y = (height.front + height.rear) / 2;
     body.rotation.z = pitch;
-    body.rotation.x = 0;
+    const cos = Math.cos(pitch), sin = Math.sin(pitch);
     for (const l of legs) {
       const end = l.front ? 'front' : 'rear';
       const phase = time * speed * 4 + ((l.front === (l.side > 0)) ? 0 : Math.PI);
       const stride = Math.cos(phase) * 0.105 * stepSize;
       // Lift while the foot swings forward (cos rising); on the ground it pushes back, so Spot walks toward +X.
       const lift = Math.max(0, -Math.sin(phase)) * 0.075 * stepSize;
-      // Solve a two-link leg in the sagittal plane, keeping standing feet on the floor.
-      const dx = lerp(-0.015, -0.04, legSit[end]) + stride;
-      const dy = -height[end] + 0.08 + lift;
-      const distance = clamp(Math.hypot(dx, dy), 0.06, 0.639);
-      const bend = Math.acos(clamp((2 * 0.32 ** 2 - distance ** 2) / (2 * 0.32 ** 2), -1, 1));
-      // Knees bend backward (toward -X), like the real robot. The body's pitch is undone so feet stay planted.
-      l.upper.rotation.z = Math.atan2(dx, -dy) - pitch - (Math.PI - bend) / 2;
-      l.knee.rotation.z = Math.PI - bend;
+      // Foot target from the hip in world axes, keeping standing feet on the floor, then turned into the pitched body frame.
+      const wx = FOOT.x + lerp(0, -0.03, legSit[end]) + stride;
+      const wy = -height[end] + FOOT_CLEARANCE + lift;
+      const x = wx * cos + wy * sin, y = -wx * sin + wy * cos;
+      // Two-link leg; the knee bends backward (toward -X), like the real robot.
+      const d = clamp(Math.hypot(x, y), Math.abs(L1 - L2) + 1e-3, L1 + L2 - 1e-4);
+      const thigh = Math.atan2(y, x) - Math.acos(clamp((L1 * L1 + d * d - L2 * L2) / (2 * L1 * d), -1, 1));
+      const shin = Math.atan2(y - L1 * Math.sin(thigh), x - L1 * Math.cos(thigh));
+      l.upper.rotation.z = thigh - REST_UPPER;
+      l.knee.rotation.z = (shin - thigh) - (REST_LOWER - REST_UPPER);
     }
   }
   pose();
-  function setWireframe(value) {
-    Object.values(materials).forEach(m => { m.wireframe = value; });
-  }
-  function dispose() {
-    geometries.forEach(g => g.dispose());
-    Object.values(materials).forEach(m => m.dispose());
-  }
+
+  const materials = new Set();
   let triangleCount = 0;
   root.traverse(node => {
-    if (node.isMesh) triangleCount += (node.geometry.index?.count ?? node.geometry.attributes.position.count) / 3;
+    if (!node.isMesh) return;
+    triangleCount += (node.geometry.index?.count ?? node.geometry.attributes.position.count) / 3;
+    [node.material].flat().forEach(m => materials.add(m));
   });
+  function setWireframe(value) {
+    materials.forEach(m => { m.wireframe = value; });
+  }
+  function dispose() {
+    root.traverse(node => node.geometry?.dispose());
+    materials.forEach(m => {
+      Object.values(m).forEach(v => { if (v?.isTexture) v.dispose(); });
+      m.dispose();
+    });
+  }
   return { root, body, legs, pose, setWireframe, dispose, triangleCount };
 }

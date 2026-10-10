@@ -230,6 +230,8 @@ def part_summaries(ds: Dataset) -> list[dict]:
         anomalies = [r["anomaly"] for r in records if r["anomaly"]]
         by_config = {cfg: pct(sum(r["outcome"] == "SUCCESS" for r in rs), len(rs))
                      for cfg in ("V1", "V2") if (rs := [r for r in records if r["configuration_version"] == cfg])}
+        if plain is None and not records:
+            plain = f"The {part['name'].split(' (')[0]} {part['plain']}. No mission actions are logged against it in this data."
         if plain is None:
             plain = (f"The {part['name'].split(' (')[0].lower()} {part['plain']}. It was used in {len(records)} actions "
                      f"and succeeded {success}% of the time" + (f", with {len(anomalies)} findings needing attention." if anomalies else "."))

@@ -6,7 +6,7 @@ import { formatTime, num, pct, reading, severityTone, titleCase, tone } from '..
 
 const SpotViewer = lazy(() => import('../SpotViewer.jsx'));
 
-const PART_ORDER = ['thermal_camera', 'ptz_camera', 'microphone', 'legs_and_body_cameras', 'battery'];
+const PART_ORDER = ['thermal_camera', 'ptz_camera', 'microphone', 'legs_and_body_cameras', 'lidar', 'battery'];
 const PART_IMAGES = {
   thermal_camera: 'thermal_pump_bearing_01.jpg', ptz_camera: 'visual_pump_motor_01.jpg',
   microphone: 'acoustic_valve_01.jpg', legs_and_body_cameras: 'pipe_gallery_01.jpg',

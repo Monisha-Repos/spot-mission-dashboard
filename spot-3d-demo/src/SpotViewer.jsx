@@ -1,106 +1,29 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { createSpotModel } from './spotModel';
+import spotUrl from '../assets/spot-inspection.glb?url';
 import './SpotViewer.css';
 
 /**
  * Clickable parts, anchored in the robot body's local frame (+X forward, +Y up, metres) so they follow the pose.
+ * Each anchor is a point on the part's outer surface, found by casting a ray at the loaded mesh.
  * `view` is where the camera sits relative to the anchor when the part is focused.
  */
 export const PART_ANCHORS = {
-  ptz_camera: { label: 'PTZ camera', anchor: [-0.27, 0.436, 0], view: [0.7, 0.3, 0.55] },
-  thermal_camera: { label: 'Thermal camera', anchor: [-0.212, 0.356, 0.022], view: [0.75, 0.05, 0.45] },
-  microphone: { label: 'Microphone', anchor: [-0.17, 0.205, 0.082], view: [-0.2, 0.4, 0.65] },
-  battery: { label: 'Battery', anchor: [-0.05, 0.0, 0.18], view: [-0.2, 0.25, 0.95] },
-  legs_and_body_cameras: { label: 'Legs + stereo cameras', anchor: [0.53, 0.0, 0], view: [0.95, 0.1, 0.55] },
-}
-
-/**
- * Spot CAM+IR as it's usually fitted: a black finned mount plate at the front of the deck, a black base with yellow
- * status dots, a PTZ dome with its zoom and thermal lenses, a black roll cage of two crossing hoops, a whip antenna,
- * and a small microphone on the plate.
- */
-function addPayloads(body) {
-  const mats = {
-    dark: new THREE.MeshStandardMaterial({ color: '#1b1e20', roughness: 0.65, metalness: 0.1 }),
-    shell: new THREE.MeshStandardMaterial({ color: '#232729', roughness: 0.45, metalness: 0.15 }),
-    mesh: new THREE.MeshStandardMaterial({ color: '#3a3e41', roughness: 0.85 }),
-    lens: new THREE.MeshStandardMaterial({ color: '#0d171c', roughness: 0.1, metalness: 0.6 }),
-    glass: new THREE.MeshStandardMaterial({ color: '#7f9aa6', roughness: 0.1, metalness: 0.3 }),
-    dot: new THREE.MeshStandardMaterial({ color: '#ffc000', emissive: '#7a5800', roughness: 0.4 }),
-    band: new THREE.MeshStandardMaterial({ color: '#8c949a', roughness: 0.3, metalness: 0.6 }),
-    cap: new THREE.MeshStandardMaterial({ color: '#c3c7ca', roughness: 0.6 }),
-    estop: new THREE.MeshStandardMaterial({ color: '#d42a1f', roughness: 0.45 }),
-  };
-  const geos = {
-    box: new THREE.BoxGeometry(1, 1, 1),
-    cyl: new THREE.CylinderGeometry(1, 1, 1, 24),
-    dome: new THREE.SphereGeometry(1, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2),
-    arch: new THREE.TorusGeometry(1, 0.045, 6, 32, Math.PI),
-    ring: new THREE.TorusGeometry(1, 0.045, 6, 32),
-  };
-  const group = new THREE.Group();
-  group.name = 'payloads';
-  const add = (geo, mat, pos, scale, rot) => {
-    const m = new THREE.Mesh(geos[geo], mats[mat]);
-    m.position.set(...pos);
-    m.scale.set(...scale);
-    if (rot) m.rotation.set(...rot);
-    group.add(m);
-    return m;
-  };
-  const X = [0, 0, Math.PI / 2];   // cylinder axis along X (lenses facing forward)
-  // Order front to back (as on the real robot): stereo-camera face, lidar in the middle of the deck, PTZ camera
-  // tower at the back, with a finned mount plate between the two.
-  const cx = -0.27;   // PTZ tower
-  const lx = 0.06;    // lidar
-  // Mount plate with heat-sink ribs, from the lidar back to the PTZ tower.
-  add('box', 'dark', [-0.18, 0.162, 0], [0.26, 0.022, 0.19]);
-  for (let i = 0; i < 6; i++) add('box', 'mesh', [-0.12, 0.181, -0.07 + i * 0.028], [0.1, 0.016, 0.006]);
-  // PTZ tower base: tall black cylinder with two yellow status dots and a small camera between them.
-  add('cyl', 'dark', [cx, 0.24, 0], [0.072, 0.135, 0.072]);
-  for (const z of [-0.028, 0.028]) add('box', 'dot', [cx + 0.07, 0.286, z], [0.006, 0.012, 0.009]);
-  add('cyl', 'lens', [cx + 0.071, 0.265, 0], [0.008, 0.005, 0.008], X);
-  // PTZ head: neck, black housing and dome, big zoom lens and a smaller thermal (IR) lens facing forward.
-  add('cyl', 'dark', [cx, 0.322, 0], [0.05, 0.03, 0.05]);
-  add('cyl', 'shell', [cx, 0.365, 0], [0.058, 0.062, 0.058]);
-  add('dome', 'shell', [cx, 0.396, 0], [0.058, 0.04, 0.058]);
-  add('cyl', 'lens', [cx + 0.056, 0.378, -0.014], [0.022, 0.008, 0.022], X);
-  add('cyl', 'glass', [cx + 0.06, 0.378, -0.014], [0.012, 0.002, 0.012], X);
-  add('cyl', 'lens', [cx + 0.057, 0.356, 0.022], [0.012, 0.008, 0.012], X);
-  // Roll cage: two crossing hoops over the head on a base ring, plus a whip antenna.
-  add('ring', 'dark', [cx, 0.318, 0], [0.098, 0.098, 0.098], [Math.PI / 2, 0, 0]);
-  add('arch', 'dark', [cx, 0.318, 0], [0.098, 0.13, 0.098]);
-  add('arch', 'dark', [cx, 0.318, 0], [0.098, 0.13, 0.098], [0, Math.PI / 2, 0]);
-  add('cyl', 'dark', [cx - 0.018, 0.5, 0], [0.004, 0.12, 0.004], [0, 0, 0.3]);
-  // Lidar in the middle of the deck: finned black base box, dark puck body with a lighter scanning band,
-  // black cap with a light grey top.
-  add('box', 'dark', [lx, 0.178, 0], [0.17, 0.05, 0.16]);
-  for (const side of [-1, 1]) for (let i = 0; i < 6; i++) add('box', 'mesh', [lx - 0.06 + i * 0.024, 0.172, side * 0.081], [0.008, 0.032, 0.004]);
-  add('cyl', 'dark', [lx, 0.222, 0], [0.058, 0.04, 0.058]);
-  add('cyl', 'band', [lx, 0.256, 0], [0.056, 0.028, 0.056]);
-  add('cyl', 'dark', [lx, 0.288, 0], [0.06, 0.036, 0.06]);
-  add('dome', 'cap', [lx, 0.306, 0], [0.06, 0.012, 0.06]);
-  // Red emergency-stop button on the front corner of the deck.
-  add('cyl', 'dark', [0.42, 0.133, -0.085], [0.017, 0.008, 0.017]);
-  add('cyl', 'estop', [0.42, 0.142, -0.085], [0.013, 0.01, 0.013]);
-  // Microphone on the mount plate, beside the PTZ tower.
-  add('cyl', 'dark', [-0.17, 0.183, 0.082], [0.012, 0.022, 0.012]);
-  add('cyl', 'mesh', [-0.17, 0.196, 0.082], [0.011, 0.004, 0.011]);
-  body.add(group);
-  return {
-    group,
-    triangles: group.children.reduce((n, m) => n + (m.geometry.index?.count ?? m.geometry.attributes.position.count) / 3, 0),
-    setWireframe: v => Object.values(mats).forEach(m => { m.wireframe = v; }),
-    dispose() { Object.values(geos).forEach(g => g.dispose()); Object.values(mats).forEach(m => m.dispose()); group.removeFromParent(); },
-  };
+  ptz_camera: { label: 'PTZ camera', anchor: [-0.232, 0.617, 0.078], view: [0.7, 0.25, 0.6] },
+  thermal_camera: { label: 'Thermal camera', anchor: [-0.31, 0.514, 0.1], view: [0.3, 0.05, 0.75] },
+  microphone: { label: 'Microphone', anchor: [-0.18, 0.194, 0.118], view: [-0.2, 0.4, 0.7] },
+  lidar: { label: 'LiDAR scanner', anchor: [0.114, 0.286, 0.067], view: [0.55, 0.15, 0.65] },
+  battery: { label: 'Battery', anchor: [0, 0.044, 0.186], view: [-0.2, 0.25, 1.0] },
+  legs_and_body_cameras: { label: 'Legs + stereo cameras', anchor: [0.594, 0.004, 0], view: [1.0, 0.1, 0.6] },
 }
 
 // Floor: a 6 m grid of 10 cm cells, plus the two axis lines through the starting point.
 const GRID_SIZE = 6, GRID_CELL = 0.1;
 const GRID_COLORS = { dark: ['#b0b0b0', '#4c4c4c'], light: ['#6e6e6e', '#d6d6d6'] };
-const HOME = { position: [1.75, 1.25, 1.85], target: [0, 0.39, 0] };
+const HOME = { position: [2.1, 1.5, 2.2], target: [0, 0.5, 0] };
 
 /** Self-contained viewer. All animation is cosmetic; this never sends robot commands. */
 export default function SpotViewer({
@@ -115,7 +38,7 @@ export default function SpotViewer({
   const markers = useRef({});
   const [error, setError] = useState('');
   const props = useRef({});
-  props.current = { stance, playing, speed, bodyHeight, autoRotate, wireframe, showGrid, quality, onStats, hotspots, onPartSelect, shiftX };
+  props.current = { stance, playing, speed, bodyHeight, autoRotate, wireframe, showGrid, quality, onStats, hotspots, focusPart, onPartSelect, shiftX };
 
   useEffect(() => {
     const element = host.current;
@@ -149,9 +72,16 @@ export default function SpotViewer({
     const fill = new THREE.DirectionalLight('#e5edf4', 1.7);
     fill.position.set(-3, 2, -3);
     scene.add(fill);
-    const model = createSpotModel();
-    const payloads = addPayloads(model.body);
-    scene.add(model.root);
+    // The robot streams in after the floor is up; everything below copes with `model` still being null.
+    let model = null;
+    new GLTFLoader().load(spotUrl, gltf => {
+      if (!alive) { gltf.scene.traverse(o => { o.geometry?.dispose(); [o.material].flat().forEach(m => m?.dispose()); }); return; }
+      model = createSpotModel(gltf.scene);
+      model.setWireframe(props.current.wireframe);
+      scene.add(model.root);
+      if (props.current.hotspots && props.current.focusPart) focus(props.current.focusPart);
+      invalidate();
+    }, undefined, () => { if (alive) setError('The 3D model could not be downloaded. Check your connection and reload.'); });
     // grid = the floor group: `cells` (uniform lines, slid and wrapped every cell while walking, which is seamless)
     // and two axis lines. The axis across Spot's path slides away for good; the one along its path doesn't need to move.
     // Distance walked. Spot stays put and the floor slides back (a treadmill), so the axes move away behind it.
@@ -198,7 +128,7 @@ export default function SpotViewer({
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, 64, 64);
     const shadowTexture = new THREE.CanvasTexture(shadowCanvas);
-    const shadow = new THREE.Mesh(new THREE.PlaneGeometry(1.85, 1.25), new THREE.MeshBasicMaterial({ map: shadowTexture, transparent: true, depthWrite: false }));
+    const shadow = new THREE.Mesh(new THREE.PlaneGeometry(2.1, 1.4), new THREE.MeshBasicMaterial({ map: shadowTexture, transparent: true, depthWrite: false }));
     shadow.rotation.x = -Math.PI / 2;
     shadow.position.y = -0.003;
     scene.add(shadow);
@@ -217,12 +147,13 @@ export default function SpotViewer({
     function schedule() { if (!frame && active()) frame = requestAnimationFrame(draw); }
     function invalidate() { dirty = true; schedule(); }
     function anchorWorld(id, out = new THREE.Vector3()) {
+      if (!model) return out.set(...PART_ANCHORS[id].anchor);
       model.body.updateWorldMatrix(true, false);
       return model.body.localToWorld(out.set(...PART_ANCHORS[id].anchor));
     }
     // Hotspot buttons are HTML, positioned over the canvas every frame the scene is drawn.
     function placeMarkers() {
-      const show = props.current.hotspots;
+      const show = props.current.hotspots && Boolean(model);
       const width = element.clientWidth, height = element.clientHeight;
       for (const [id, el] of Object.entries(markers.current)) {
         if (!el) continue;
@@ -276,13 +207,13 @@ export default function SpotViewer({
           camera.position.copy(controls.target).add(offset);
           controls.update();
         }
-        model.pose({ stance: p.stance, time, speed: p.speed, bodyHeight: p.bodyHeight, moving: gait > 0, gait, sit: sitAmt });
+        model?.pose({ stance: p.stance, time, speed: p.speed, bodyHeight: p.bodyHeight, moving: gait > 0, gait, sit: sitAmt });
         placeFloor();
         renderer.render(scene, camera);
         placeMarkers();
         lastDraw = now;
         dirty = false;
-        const metrics = { triangles: model.triangleCount + payloads.triangles, calls: renderer.info.render.calls, geometries: renderer.info.memory.geometries };
+        const metrics = { triangles: model?.triangleCount ?? 0, calls: renderer.info.render.calls, geometries: renderer.info.memory.geometries };
         const key = JSON.stringify(metrics);
         if (key !== lastMetrics) { lastMetrics = key; p.onStats?.(metrics); }
       }
@@ -314,7 +245,7 @@ export default function SpotViewer({
       invalidate();
     }
     function setView(name) {
-      const positions = { perspective: HOME.position, side: [0, 0.65, 2.65], front: [2.65, 0.65, 0], top: [0, 2.9, 0.001] };
+      const positions = { perspective: HOME.position, side: [0, 0.75, 3.1], front: [3.1, 0.75, 0], top: [0, 3.4, 0.001] };
       flyTo(new THREE.Vector3(...(positions[name] || positions.perspective)), new THREE.Vector3(...HOME.target));
     }
     function focus(id) {
@@ -327,7 +258,7 @@ export default function SpotViewer({
     let down = null;
     const onDown = e => { down = { x: e.clientX, y: e.clientY }; };
     const onUp = e => {
-      if (!down || Math.hypot(e.clientX - down.x, e.clientY - down.y) > 5 || !props.current.onPartSelect) return;
+      if (!down || Math.hypot(e.clientX - down.x, e.clientY - down.y) > 5 || !props.current.onPartSelect || !model) return;
       const rect = renderer.domElement.getBoundingClientRect();
       raycaster.setFromCamera(new THREE.Vector2(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1), camera);
       const hit = raycaster.intersectObject(model.root, true)[0];
@@ -362,7 +293,8 @@ export default function SpotViewer({
     reducedMotion.addEventListener('change', invalidate);
     controls.addEventListener('change', invalidate);
     engine.current = {
-      model, payloads, setView, focus, resize, invalidate, makeGrid,
+      setView, focus, resize, invalidate, makeGrid,
+      get model() { return model; },
       get grid() { return grid; },
     };
     camera.position.set(...HOME.position);
@@ -380,8 +312,7 @@ export default function SpotViewer({
       renderer.domElement.removeEventListener('pointerdown', onDown);
       renderer.domElement.removeEventListener('pointerup', onUp);
       controls.dispose();
-      payloads.dispose();
-      model.dispose();
+      model?.dispose();
       disposeFloor();
       shadow.geometry.dispose();
       shadow.material.dispose();
@@ -395,8 +326,7 @@ export default function SpotViewer({
   useEffect(() => {
     const e = engine.current;
     if (!e) return;
-    e.model.setWireframe(wireframe);
-    e.payloads.setWireframe(wireframe);
+    e.model?.setWireframe(wireframe);
     e.grid.visible = showGrid;
     e.resize();
     e.invalidate();

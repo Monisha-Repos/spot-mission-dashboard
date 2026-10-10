@@ -43,7 +43,7 @@ npm run build    # dist/ is the static site
 src/
   App.jsx                 shell: tabs, theme, alarm arming, shared context
   api.js                  fetch helper, useApi() hook (re-fetches on every live mission), sign-in session
-  SpotViewer.jsx          3D viewer: payloads, part hotspots, click-to-zoom camera (spotModel.js is the robot)
+  SpotViewer.jsx          3D viewer: loads assets/spot-inspection.glb, part hotspots, click-to-zoom camera (spotModel.js poses it)
   tabs/                   Overview, DataScientist
   modules/ops/            Operator Console + sign-in (kept separate, like backend/app/ops)
   components/             InclinedMap, AskPanel, AlarmCenter, DataTable, LineChart, ui

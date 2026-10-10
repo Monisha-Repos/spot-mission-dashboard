@@ -35,6 +35,8 @@ PARTS = {
                    "measurement_types": ["SOUND_DB"]},
     "legs_and_body_cameras": {"name": "Legs + body stereo cameras", "plain": "walk the route and keep track of where Spot is",
                               "measurement_types": ["LOCALIZATION_CONFIDENCE_PCT"]},
+    "lidar": {"name": "LiDAR scanner", "plain": "scans the surroundings in 3D so Spot can map the route",
+              "measurement_types": []},
     "radio": {"name": "Radio / comms payload", "plain": "keeps Spot connected to the network",
               "measurement_types": []},
     "battery": {"name": "Battery", "plain": "powers the mission", "measurement_types": []},
