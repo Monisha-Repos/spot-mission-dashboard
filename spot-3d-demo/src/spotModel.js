@@ -14,15 +14,19 @@ export function createSpotModel() {
     materials[name] = new THREE.MeshStandardMaterial({ color, roughness, metalness });
     return materials[name];
   };
-  material('yellow', '#efbd28', 0.42, 0.18);
-  material('edge', '#dba91b', 0.5, 0.15);
-  material('dark', '#252a2b', 0.65, 0.15);
-  material('rubber', '#15191a', 0.95);
-  material('silver', '#909994', 0.4, 0.65);
-  material('lens', '#152f3a', 0.18, 0.45);
-  material('glass', '#456f7e', 0.2, 0.3);
+  // Matte finish like the real robot: yellow shells, black actuators and payload rail, no shiny trim.
+  material('yellow', '#f4c20d', 0.58, 0);
+  material('dark', '#1d2022', 0.7, 0.05);
+  material('mesh', '#34383b', 0.85, 0.05);
+  material('rubber', '#121416', 0.95);
+  material('lens', '#0e1a20', 0.15, 0.5);
+  material('glass', '#2c4a56', 0.2, 0.3);
   material('led', '#99d8b1');
   materials.led.emissive.set('#397852');
+  material('ledWhite', '#ffffff');
+  materials.ledWhite.emissive.set('#f2f6ff');
+  material('ledAmber', '#ffb347');
+  materials.ledAmber.emissive.set('#ff7a00');
 
   const box = new THREE.BoxGeometry(1, 1, 1);
   const cylinder = new THREE.CylinderGeometry(1, 1, 1, 12);
@@ -62,36 +66,32 @@ export function createSpotModel() {
 
   mesh(body, panel, 'yellow', [0, 0.015, 0], [0.98, 0.21, 0.34], 'main-shell');
   mesh(body, panel, 'dark', [0, -0.072, 0], [0.94, 0.105, 0.29], 'underbody');
+  // Top: black payload deck with two low mounting rails.
   mesh(body, panel, 'dark', [-0.02, 0.127, 0], [0.69, 0.035, 0.285], 'top-deck');
-  block(body, 'yellow', [-0.06, 0.15, 0], [0.44, 0.022, 0.22], 'battery-cover');
-  // Payload rails and small fasteners.
-  for (const z of [-0.115, 0.115]) {
-    block(body, 'silver', [-0.03, 0.165, z], [0.56, 0.014, 0.017]);
-    for (const x of [-0.27, -0.08, 0.15]) axle(body, 'dark', [x, 0.175, z], 0.009, 0.004, 'y');
-  }
+  for (const z of [-0.1, 0.1]) block(body, 'dark', [-0.03, 0.152, z], [0.62, 0.012, 0.022]);
   for (const side of [-1, 1]) {
-    block(body, 'dark', [0.015, 0.037, side * 0.177], [0.32, 0.038, 0.009]);
-    // Side stereo sensor pod.
-    mesh(body, panel, 'dark', [0.02, -0.013, side * 0.19], [0.16, 0.066, 0.029]);
-    for (const x of [-0.035, 0.065]) {
-      axle(body, 'silver', [x, -0.01, side * 0.209], 0.022, 0.008);
-      axle(body, 'lens', [x, -0.01, side * 0.215], 0.016, 0.009);
-    }
-    for (let i = 0; i < 5; i++) block(body, 'dark', [-0.20 + i * 0.024, 0.077, side * 0.177], [0.009, 0.026, 0.008]);
+    // Side stereo camera: a small black window toward the rear, and a black vent strip along the lower edge.
+    mesh(body, panel, 'dark', [-0.2, 0.03, side * 0.168], [0.17, 0.05, 0.03], 'side-camera-window');
+    for (const x of [-0.255, -0.222]) axle(body, 'lens', [x, 0.03, side * 0.184], 0.009, 0.004);
+    block(body, 'glass', [-0.16, 0.03, side * 0.184], [0.05, 0.016, 0.003]);
+    block(body, 'mesh', [0.1, -0.03, side * 0.171], [0.46, 0.018, 0.006], 'side-vent');
+    // Heat-sink fins on the black belly.
+    for (let i = 0; i < 9; i++) block(body, 'mesh', [-0.3 + i * 0.07, -0.095, side * 0.136], [0.012, 0.03, 0.006]);
   }
-  // Flat black face and stereo lenses are Spot's most recognizable detail.
-  mesh(body, panel, 'dark', [0.506, 0.01, 0], [0.046, 0.157, 0.294], 'front-sensor-panel');
-  for (const z of [-0.098, 0.098]) {
-    axle(body, 'rubber', [0.538, 0.035, z], 0.043, 0.024, 'x');
-    axle(body, 'silver', [0.552, 0.035, z], 0.032, 0.006, 'x');
-    axle(body, 'lens', [0.557, 0.035, z], 0.026, 0.007, 'x');
-    axle(body, 'glass', [0.562, 0.044, z - 0.007], 0.009, 0.002, 'x');
-  }
-  block(body, 'rubber', [0.534, -0.033, 0], [0.02, 0.035, 0.075]);
-  axle(body, 'lens', [0.548, -0.032, 0], 0.012, 0.01, 'x');
+  // Front: yellow bezel around a recessed black face with a centre mesh grille and a camera column either side,
+  // thin light strips on the bezel and an amber light underneath.
+  block(body, 'dark', [0.512, 0.012, 0], [0.012, 0.118, 0.218], 'front-face');
+  block(body, 'mesh', [0.519, 0.008, 0], [0.003, 0.092, 0.05], 'front-grille');
+  for (let i = 0; i < 9; i++) block(body, 'dark', [0.521, -0.03 + i * 0.0095, 0], [0.002, 0.0025, 0.05]);
+  axle(body, 'lens', [0.52, 0.035, -0.06], 0.016, 0.006, 'x');
+  for (const y of [0.005, -0.03]) block(body, 'glass', [0.52, y, -0.06], [0.003, 0.02, 0.026]);
+  for (const y of [0.04, 0.016, -0.008]) axle(body, 'lens', [0.52, y, 0.06], 0.009, 0.006, 'x');
+  block(body, 'glass', [0.52, -0.036, 0.06], [0.003, 0.018, 0.026]);
+  for (const z of [-0.128, 0.128]) block(body, 'ledWhite', [0.515, 0.012, z], [0.004, 0.072, 0.005], 'light-strip');
+  block(body, 'ledAmber', [0.49, -0.088, 0], [0.012, 0.012, 0.07], 'status-light');
+  // Rear: plain panel with a status light (no camera "eyes", so the back doesn't read as a face).
   mesh(body, panel, 'dark', [-0.498, 0, 0], [0.026, 0.133, 0.274], 'rear-panel');
   block(body, 'led', [-0.516, 0.029, 0.084], [0.009, 0.014, 0.037]);
-  for (const z of [-0.05, 0.025]) axle(body, 'lens', [-0.52, 0.015, z], 0.02, 0.008, 'x');
 
   const legs = [];
   for (const front of [true, false]) for (const side of [-1, 1]) {
@@ -99,45 +99,60 @@ export function createSpotModel() {
     leg.name = `${front ? 'front' : 'rear'}-${side > 0 ? 'left' : 'right'}`;
     leg.position.set(front ? 0.355 : -0.355, -0.047, side * 0.211);
     body.add(leg);
+    // Black hip actuator under a chunky yellow thigh cover.
     axle(leg, 'dark', [0, 0, 0], 0.085, 0.12);
-    axle(leg, 'yellow', [0, 0, side * 0.065], 0.071, 0.024);
-    axle(leg, 'edge', [0, 0, side * 0.081], 0.037, 0.011);
+    axle(leg, 'mesh', [0, 0, side * 0.064], 0.06, 0.012);
     const upper = new THREE.Group();
     upper.name = `${leg.name}-hip`;
     upper.position.z = side * 0.067;
     leg.add(upper);
-    mesh(upper, panel, 'yellow', [0, -0.145, 0], [0.105, 0.31, 0.059]);
-    block(upper, 'dark', [-0.044, -0.155, -side * 0.026], [0.023, 0.245, 0.036]);
+    mesh(upper, panel, 'yellow', [0, -0.14, 0], [0.12, 0.33, 0.072]);
+    block(upper, 'dark', [-0.05, -0.16, -side * 0.028], [0.022, 0.24, 0.036]);
     const knee = new THREE.Group();
     knee.name = `${leg.name}-knee`;
     knee.position.y = -0.32;
     upper.add(knee);
-    axle(knee, 'dark', [0, 0, 0], 0.052, 0.08);
-    axle(knee, 'silver', [0, 0, side * 0.045], 0.022, 0.012);
-    mesh(knee, panel, 'dark', [0, -0.147, 0], [0.047, 0.30, 0.037]);
-    block(knee, 'silver', [0.009, -0.128, side * 0.021], [0.013, 0.19, 0.005]);
-    const foot = mesh(knee, sphere, 'rubber', [0, -0.32, 0], [0.038, 0.032, 0.035], `${leg.name}-foot`);
+    // Slim black lower leg that forks near the foot, ending in a rubber foot.
+    axle(knee, 'dark', [0, 0, 0], 0.05, 0.08);
+    mesh(knee, panel, 'dark', [0, -0.13, 0], [0.04, 0.27, 0.034]);
+    const fork = block(knee, 'dark', [0.014, -0.262, 0], [0.008, 0.085, 0.026]);
+    fork.rotation.z = -0.28;
+    const foot = mesh(knee, sphere, 'rubber', [0, -0.32, 0], [0.042, 0.036, 0.04], `${leg.name}-foot`);
     legs.push({ hip: leg, upper, knee, foot, front, side });
   }
 
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
-  function pose({ stance = 'stand', time = 0, speed = 1, bodyHeight = 0, moving = false } = {}) {
-    const sitting = stance === 'sit';
-    const walking = stance === 'walk';
-    body.position.y = (sitting ? 0.33 : 0.67) + bodyHeight;
-    body.rotation.z = 0;
+  const ease = t => t * t * (3 - 2 * t);
+  const lerp = (a, b, t) => a + (b - a) * t;
+  /**
+   * sit: 0 = standing, 1 = sitting; values in between are the sit-down / stand-up motion.
+   * Defaults to the stance, so pose({ stance: 'sit' }) still gives the final sitting pose.
+   */
+  function pose({ stance = 'stand', time = 0, speed = 1, bodyHeight = 0, moving = false, sit, gait } = {}) {
+    // gait: stride size from 0 (stopped) to 1 (full); defaults to full while walking.
+    const stepSize = clamp(gait ?? (stance === 'walk' && moving ? 1 : 0), 0, 1);
+    const s = clamp(sit ?? (stance === 'sit' ? 1 : 0), 0, 1);
+    // Like the real robot, the rear goes down first and comes up last; the front follows.
+    const legSit = { rear: ease(clamp(s / 0.65, 0, 1)), front: ease(clamp((s - 0.35) / 0.65, 0, 1)) };
+    const height = { rear: lerp(0.67, 0.33, legSit.rear) + bodyHeight, front: lerp(0.67, 0.33, legSit.front) + bodyHeight };
+    const pitch = Math.atan2(height.front - height.rear, 0.71);
+    body.position.y = (height.front + height.rear) / 2;
+    body.rotation.z = pitch;
     body.rotation.x = 0;
     for (const l of legs) {
+      const end = l.front ? 'front' : 'rear';
       const phase = time * speed * 4 + ((l.front === (l.side > 0)) ? 0 : Math.PI);
-      const stride = walking && moving ? Math.cos(phase) * 0.105 : 0;
-      const lift = walking && moving ? Math.max(0, Math.sin(phase)) * 0.075 : 0;
+      const stride = Math.cos(phase) * 0.105 * stepSize;
+      // Lift while the foot swings forward (cos rising); on the ground it pushes back, so Spot walks toward +X.
+      const lift = Math.max(0, -Math.sin(phase)) * 0.075 * stepSize;
       // Solve a two-link leg in the sagittal plane, keeping standing feet on the floor.
-      const dx = (sitting ? -0.04 : -0.015) + stride;
-      const dy = -body.position.y + 0.08 + lift;
+      const dx = lerp(-0.015, -0.04, legSit[end]) + stride;
+      const dy = -height[end] + 0.08 + lift;
       const distance = clamp(Math.hypot(dx, dy), 0.06, 0.639);
       const bend = Math.acos(clamp((2 * 0.32 ** 2 - distance ** 2) / (2 * 0.32 ** 2), -1, 1));
-      l.upper.rotation.z = Math.atan2(dx, -dy) + (Math.PI - bend) / 2;
-      l.knee.rotation.z = -(Math.PI - bend);
+      // Knees bend backward (toward -X), like the real robot. The body's pitch is undone so feet stay planted.
+      l.upper.rotation.z = Math.atan2(dx, -dy) - pitch - (Math.PI - bend) / 2;
+      l.knee.rotation.z = Math.PI - bend;
     }
   }
   pose();

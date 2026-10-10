@@ -117,6 +117,9 @@ const WAYPOINT_COLUMNS = [
 
 function Outcomes({ compare }) {
   const { V1, V2, tests, summary, changes } = compare;
+  if (!V1 || !V2) {
+    return <p className="note" role="status">{summary}</p>;
+  }
   const headline = ['action_success_pct', 'mission_completion_pct', 'anomalies_per_mission', 'avg_battery_drain_pct', 'avg_end_battery_pct', 'reading_good_pct', 'hidden_failure_missions', 'avg_predicted_failure_risk'];
   const verdict = Object.fromEntries(changes.map(c => [c.kpi, c.verdict]));
   return (

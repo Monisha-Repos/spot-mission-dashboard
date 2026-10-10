@@ -223,7 +223,8 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 
 /* ---------- overview hero + 3D stage ---------- */
 .hero { position: relative; }
-.stage { position: relative; height: calc(100vh - var(--top)); min-height: 560px; max-height: 920px; overflow: hidden; background: radial-gradient(ellipse at 60% 55%, var(--surface-2) 0%, var(--bg) 70%); }
+.stage { position: relative; height: calc(100vh - var(--top)); min-height: 560px; max-height: 920px; overflow: hidden; background: radial-gradient(ellipse at 60% 55%, #4a4a4a 0%, #2e2e2e 55%, #1e1e1e 100%); }
+/* Dark mode: a mid-grey stage (not page black) so Spot's black legs stand out. */
 :root[data-theme="light"] .stage { background: radial-gradient(ellipse at 60% 55%, #ffffff 0%, var(--surface-2) 85%); }
 .stage-skeleton { position: absolute; inset: 0; }
 .hero-copy { position: absolute; top: 40px; left: var(--gutter); z-index: 3; max-width: 440px; pointer-events: none; }

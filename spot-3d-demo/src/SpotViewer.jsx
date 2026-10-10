@@ -1,4 +1,4 @@
-import React, { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { createSpotModel } from './spotModel';
@@ -9,24 +9,37 @@ import './SpotViewer.css';
  * `view` is where the camera sits relative to the anchor when the part is focused.
  */
 export const PART_ANCHORS = {
-  ptz_camera: { label: 'PTZ camera', anchor: [0.25, 0.31, 0], view: [0.75, 0.35, 0.65] },
-  thermal_camera: { label: 'Thermal camera', anchor: [0.345, 0.215, 0], view: [0.8, 0.15, -0.45] },
-  microphone: { label: 'Microphone', anchor: [-0.24, 0.25, 0.09], view: [-0.55, 0.4, 0.6] },
-  radio: { label: 'Radio', anchor: [-0.36, 0.42, -0.1], view: [-0.6, 0.35, -0.7] },
-  battery: { label: 'Battery', anchor: [-0.1, 0.0, 0.2], view: [-0.2, 0.25, 0.95] },
-  legs_and_body_cameras: { label: 'Legs + stereo cameras', anchor: [0.57, 0.04, 0], view: [0.95, 0.1, 0.55] },
-};
+  ptz_camera: { label: 'PTZ camera', anchor: [-0.27, 0.436, 0], view: [0.7, 0.3, 0.55] },
+  thermal_camera: { label: 'Thermal camera', anchor: [-0.212, 0.356, 0.022], view: [0.75, 0.05, 0.45] },
+  microphone: { label: 'Microphone', anchor: [-0.17, 0.205, 0.082], view: [-0.2, 0.4, 0.65] },
+  battery: { label: 'Battery', anchor: [-0.05, 0.0, 0.18], view: [-0.2, 0.25, 0.95] },
+  legs_and_body_cameras: { label: 'Legs + stereo cameras', anchor: [0.53, 0.0, 0], view: [0.95, 0.1, 0.55] },
+}
 
-/** Spot CAM+IR, a microphone and a radio antenna: payloads the base model doesn't have, so the parts can be clicked. */
+/**
+ * Spot CAM+IR as it's usually fitted: a black finned mount plate at the front of the deck, a black base with yellow
+ * status dots, a PTZ dome with its zoom and thermal lenses, a black roll cage of two crossing hoops, a whip antenna,
+ * and a small microphone on the plate.
+ */
 function addPayloads(body) {
   const mats = {
-    dark: new THREE.MeshStandardMaterial({ color: '#202426', roughness: 0.6, metalness: 0.2 }),
-    lens: new THREE.MeshStandardMaterial({ color: '#13262f', roughness: 0.15, metalness: 0.5 }),
-    dome: new THREE.MeshStandardMaterial({ color: '#3b5560', roughness: 0.1, metalness: 0.3, transparent: true, opacity: 0.85 }),
-    silver: new THREE.MeshStandardMaterial({ color: '#9aa29e', roughness: 0.35, metalness: 0.7 }),
-    gold: new THREE.MeshStandardMaterial({ color: '#ffc000', roughness: 0.4, metalness: 0.2 }),
+    dark: new THREE.MeshStandardMaterial({ color: '#1b1e20', roughness: 0.65, metalness: 0.1 }),
+    shell: new THREE.MeshStandardMaterial({ color: '#232729', roughness: 0.45, metalness: 0.15 }),
+    mesh: new THREE.MeshStandardMaterial({ color: '#3a3e41', roughness: 0.85 }),
+    lens: new THREE.MeshStandardMaterial({ color: '#0d171c', roughness: 0.1, metalness: 0.6 }),
+    glass: new THREE.MeshStandardMaterial({ color: '#7f9aa6', roughness: 0.1, metalness: 0.3 }),
+    dot: new THREE.MeshStandardMaterial({ color: '#ffc000', emissive: '#7a5800', roughness: 0.4 }),
+    band: new THREE.MeshStandardMaterial({ color: '#8c949a', roughness: 0.3, metalness: 0.6 }),
+    cap: new THREE.MeshStandardMaterial({ color: '#c3c7ca', roughness: 0.6 }),
+    estop: new THREE.MeshStandardMaterial({ color: '#d42a1f', roughness: 0.45 }),
   };
-  const geos = { box: new THREE.BoxGeometry(1, 1, 1), cyl: new THREE.CylinderGeometry(1, 1, 1, 16), sph: new THREE.SphereGeometry(1, 16, 12) };
+  const geos = {
+    box: new THREE.BoxGeometry(1, 1, 1),
+    cyl: new THREE.CylinderGeometry(1, 1, 1, 24),
+    dome: new THREE.SphereGeometry(1, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2),
+    arch: new THREE.TorusGeometry(1, 0.045, 6, 32, Math.PI),
+    ring: new THREE.TorusGeometry(1, 0.045, 6, 32),
+  };
   const group = new THREE.Group();
   group.name = 'payloads';
   const add = (geo, mat, pos, scale, rot) => {
@@ -37,21 +50,44 @@ function addPayloads(body) {
     group.add(m);
     return m;
   };
-  // Spot CAM+IR: mast, head with a forward IR lens, PTZ dome on top.
-  add('box', 'dark', [0.25, 0.19, 0], [0.06, 0.05, 0.06]);
-  add('box', 'dark', [0.27, 0.225, 0], [0.13, 0.07, 0.12]);
-  add('box', 'gold', [0.27, 0.262, 0], [0.13, 0.006, 0.12]);
-  add('cyl', 'silver', [0.338, 0.215, 0], [0.03, 0.01, 0.03], [0, 0, Math.PI / 2]);
-  add('cyl', 'lens', [0.344, 0.215, 0], [0.022, 0.006, 0.022], [0, 0, Math.PI / 2]);
-  add('sph', 'dome', [0.25, 0.29, 0], [0.05, 0.045, 0.05]);
-  add('cyl', 'lens', [0.285, 0.29, 0], [0.014, 0.01, 0.014], [0, 0, Math.PI / 2]);
-  // Microphone on the rear rail.
-  add('cyl', 'dark', [-0.24, 0.2, 0.09], [0.016, 0.07, 0.016]);
-  add('sph', 'silver', [-0.24, 0.245, 0.09], [0.022, 0.022, 0.022]);
-  // Radio antenna.
-  add('cyl', 'dark', [-0.36, 0.19, -0.1], [0.022, 0.03, 0.022]);
-  add('cyl', 'dark', [-0.36, 0.32, -0.1], [0.005, 0.24, 0.005]);
-  add('sph', 'gold', [-0.36, 0.44, -0.1], [0.01, 0.01, 0.01]);
+  const X = [0, 0, Math.PI / 2];   // cylinder axis along X (lenses facing forward)
+  // Order front to back (as on the real robot): stereo-camera face, lidar in the middle of the deck, PTZ camera
+  // tower at the back, with a finned mount plate between the two.
+  const cx = -0.27;   // PTZ tower
+  const lx = 0.06;    // lidar
+  // Mount plate with heat-sink ribs, from the lidar back to the PTZ tower.
+  add('box', 'dark', [-0.18, 0.162, 0], [0.26, 0.022, 0.19]);
+  for (let i = 0; i < 6; i++) add('box', 'mesh', [-0.12, 0.181, -0.07 + i * 0.028], [0.1, 0.016, 0.006]);
+  // PTZ tower base: tall black cylinder with two yellow status dots and a small camera between them.
+  add('cyl', 'dark', [cx, 0.24, 0], [0.072, 0.135, 0.072]);
+  for (const z of [-0.028, 0.028]) add('box', 'dot', [cx + 0.07, 0.286, z], [0.006, 0.012, 0.009]);
+  add('cyl', 'lens', [cx + 0.071, 0.265, 0], [0.008, 0.005, 0.008], X);
+  // PTZ head: neck, black housing and dome, big zoom lens and a smaller thermal (IR) lens facing forward.
+  add('cyl', 'dark', [cx, 0.322, 0], [0.05, 0.03, 0.05]);
+  add('cyl', 'shell', [cx, 0.365, 0], [0.058, 0.062, 0.058]);
+  add('dome', 'shell', [cx, 0.396, 0], [0.058, 0.04, 0.058]);
+  add('cyl', 'lens', [cx + 0.056, 0.378, -0.014], [0.022, 0.008, 0.022], X);
+  add('cyl', 'glass', [cx + 0.06, 0.378, -0.014], [0.012, 0.002, 0.012], X);
+  add('cyl', 'lens', [cx + 0.057, 0.356, 0.022], [0.012, 0.008, 0.012], X);
+  // Roll cage: two crossing hoops over the head on a base ring, plus a whip antenna.
+  add('ring', 'dark', [cx, 0.318, 0], [0.098, 0.098, 0.098], [Math.PI / 2, 0, 0]);
+  add('arch', 'dark', [cx, 0.318, 0], [0.098, 0.13, 0.098]);
+  add('arch', 'dark', [cx, 0.318, 0], [0.098, 0.13, 0.098], [0, Math.PI / 2, 0]);
+  add('cyl', 'dark', [cx - 0.018, 0.5, 0], [0.004, 0.12, 0.004], [0, 0, 0.3]);
+  // Lidar in the middle of the deck: finned black base box, dark puck body with a lighter scanning band,
+  // black cap with a light grey top.
+  add('box', 'dark', [lx, 0.178, 0], [0.17, 0.05, 0.16]);
+  for (const side of [-1, 1]) for (let i = 0; i < 6; i++) add('box', 'mesh', [lx - 0.06 + i * 0.024, 0.172, side * 0.081], [0.008, 0.032, 0.004]);
+  add('cyl', 'dark', [lx, 0.222, 0], [0.058, 0.04, 0.058]);
+  add('cyl', 'band', [lx, 0.256, 0], [0.056, 0.028, 0.056]);
+  add('cyl', 'dark', [lx, 0.288, 0], [0.06, 0.036, 0.06]);
+  add('dome', 'cap', [lx, 0.306, 0], [0.06, 0.012, 0.06]);
+  // Red emergency-stop button on the front corner of the deck.
+  add('cyl', 'dark', [0.42, 0.133, -0.085], [0.017, 0.008, 0.017]);
+  add('cyl', 'estop', [0.42, 0.142, -0.085], [0.013, 0.01, 0.013]);
+  // Microphone on the mount plate, beside the PTZ tower.
+  add('cyl', 'dark', [-0.17, 0.183, 0.082], [0.012, 0.022, 0.012]);
+  add('cyl', 'mesh', [-0.17, 0.196, 0.082], [0.011, 0.004, 0.011]);
   body.add(group);
   return {
     group,
@@ -61,45 +97,25 @@ function addPayloads(body) {
   };
 }
 
-const GRID_COLORS = { dark: ['#5a5a5a', '#2c2c2c'], light: ['#a0a0a0', '#d6d6d6'] };
+// Floor: a 6 m grid of 10 cm cells, plus the two axis lines through the starting point.
+const GRID_SIZE = 6, GRID_CELL = 0.1;
+const GRID_COLORS = { dark: ['#b0b0b0', '#4c4c4c'], light: ['#6e6e6e', '#d6d6d6'] };
 const HOME = { position: [1.75, 1.25, 1.85], target: [0, 0.39, 0] };
 
 /** Self-contained viewer. All animation is cosmetic; this never sends robot commands. */
-const SpotViewer = forwardRef(function SpotViewer({
+export default function SpotViewer({
   stance = 'stand', playing = true, speed = 1, bodyHeight = 0,
   autoRotate = false, wireframe = false, showGrid = true, quality = 'balanced',
   view = 'perspective', resetKey = 0, onStats,
   theme = 'dark', hotspots = false, focusPart = null, onPartSelect, partStatus = {},
   shiftX = 0, // move the robot sideways on screen, as a fraction of the width (+ is right)
-}, ref) {
+}) {
   const host = useRef(null);
   const engine = useRef(null);
   const markers = useRef({});
   const [error, setError] = useState('');
   const props = useRef({});
   props.current = { stance, playing, speed, bodyHeight, autoRotate, wireframe, showGrid, quality, onStats, hotspots, onPartSelect, shiftX };
-
-  useImperativeHandle(ref, () => ({
-    async exportGLB() {
-      if (!engine.current) throw new Error('The model is not ready.');
-      const { GLTFExporter } = await import('three/addons/exporters/GLTFExporter.js');
-      const model = engine.current.model;
-      const wasWireframe = props.current.wireframe;
-      model.setWireframe(false);
-      try {
-        const buffer = await new GLTFExporter().parseAsync(model.root, { binary: true });
-        const url = URL.createObjectURL(new Blob([buffer], { type: 'model/gltf-binary' }));
-        const anchor = document.createElement('a');
-        anchor.href = url;
-        anchor.download = 'spot-prototype.glb';
-        anchor.click();
-        setTimeout(() => URL.revokeObjectURL(url), 1000);
-      } finally {
-        model.setWireframe(wasWireframe);
-        engine.current?.invalidate();
-      }
-    },
-  }), []);
 
   useEffect(() => {
     const element = host.current;
@@ -136,16 +152,39 @@ const SpotViewer = forwardRef(function SpotViewer({
     const model = createSpotModel();
     const payloads = addPayloads(model.body);
     scene.add(model.root);
-    let grid = null;
+    // grid = the floor group: `cells` (uniform lines, slid and wrapped every cell while walking, which is seamless)
+    // and two axis lines. The axis across Spot's path slides away for good; the one along its path doesn't need to move.
+    // Distance walked. Spot stays put and the floor slides back (a treadmill), so the axes move away behind it.
+    let walked = 0;
+    let grid = null, cells = null, axisAcross = null;
+    function disposeFloor() {
+      grid?.traverse(o => { o.geometry?.dispose(); o.material?.dispose(); });
+      if (grid) scene.remove(grid);
+    }
     function makeGrid(name) {
-      if (grid) { scene.remove(grid); grid.geometry.dispose(); grid.material.dispose(); }
+      disposeFloor();
       const [major, minor] = GRID_COLORS[name] || GRID_COLORS.dark;
-      grid = new THREE.GridHelper(6, 60, major, minor);
-      grid.material.transparent = true;
-      grid.material.opacity = 0.5;
+      grid = new THREE.Group();
       grid.position.y = -0.008;
       grid.visible = props.current.showGrid;
+      cells = new THREE.GridHelper(GRID_SIZE, GRID_SIZE / GRID_CELL, minor, minor);
+      const half = GRID_SIZE / 2;
+      const axisMaterial = () => new THREE.LineBasicMaterial({ color: major, transparent: true, opacity: 0.95 });
+      const line = (a, b) => new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(...a), new THREE.Vector3(...b)]), axisMaterial());
+      const axisAlong = line([-half, 0.001, 0], [half, 0.001, 0]);
+      axisAcross = line([0, 0.001, -half], [0, 0.001, half]);
+      cells.material.transparent = true;
+      cells.material.opacity = 0.5;
+      grid.add(cells, axisAlong, axisAcross);
+      placeFloor();
       scene.add(grid);
+    }
+    // Spot faces +X, so the floor moves toward -X as it walks.
+    function placeFloor() {
+      if (!cells) return;
+      cells.position.x = -(walked % GRID_CELL);
+      axisAcross.position.x = -walked;
+      axisAcross.visible = walked < GRID_SIZE / 2;
     }
     makeGrid(theme);
     // A small generated contact-shadow texture replaces expensive shadow maps.
@@ -167,6 +206,10 @@ const SpotViewer = forwardRef(function SpotViewer({
     let frame = 0, lastDraw = -Infinity, lastTick = 0, time = 0;
     let dirty = true, alive = true, inViewport = true, lost = false;
     let tween = null;
+    // 0 = standing, 1 = sitting; eased toward the selected stance so sit/stand animate.
+    let sitAmt = props.current.stance === 'sit' ? 1 : 0;
+    // 0 = stopped, 1 = full stride; eased so Spot speeds up and slows down instead of snapping.
+    let gait = props.current.stance === 'walk' && props.current.playing ? 1 : 0;
     let lastMetrics = '';
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
     const v = new THREE.Vector3();
@@ -193,14 +236,31 @@ const SpotViewer = forwardRef(function SpotViewer({
       frame = 0;
       if (!active()) return;
       const p = props.current;
-      const animate = p.playing && p.stance === 'walk';
+      // Gait eases in and out: leaving Walk slows Spot to a stop before it sits or stands still,
+      // and Walk from sitting stands up first. Both are gated so the motions happen one after the other.
+      const gaitTarget = p.playing && p.stance === 'walk' && sitAmt === 0 ? 1 : 0;
+      const changingGait = gait !== gaitTarget;
+      const animate = gait > 0 || gaitTarget > 0;
       const rotate = p.autoRotate && !reducedMotion.matches && !tween;
-      const continuous = animate || rotate || Boolean(tween);
+      const sitTarget = p.stance === 'sit' ? 1 : 0;
+      const sitting = sitAmt !== sitTarget && gait === 0;
+      const continuous = animate || changingGait || rotate || Boolean(tween) || sitting;
       const interval = p.quality === 'eco' ? 1000 / 24 : 1000 / 30;
       if (now - lastDraw < interval - 0.5) { schedule(); return; }
       const dt = lastTick ? Math.min((now - lastTick) / 1000, 0.08) : 0;
       lastTick = now;
+      if (changingGait) {
+        // About 0.5 s to get going, 1 s to slow down.
+        const step = reducedMotion.matches ? 1 : gaitTarget > gait ? dt / 0.5 : dt / 1.0;
+        gait = gaitTarget > gait ? Math.min(1, gait + step) : Math.max(0, gait - step);
+      }
       if (animate) time += dt;
+      if (sitting) {
+        const step = reducedMotion.matches ? 1 : dt / 1.1;
+        sitAmt = sitTarget > sitAmt ? Math.min(sitTarget, sitAmt + step) : Math.max(sitTarget, sitAmt - step);
+      }
+      // Ground speed matching the leg stride (0.21 m sweep per half gait cycle) scaled by the gait, so feet don't skate.
+      if (animate && !reducedMotion.matches) walked += dt * p.speed * 0.267 * gait;
       if (dirty || continuous) {
         if (tween) {
           tween.t = Math.min(1, tween.t + dt / tween.duration);
@@ -216,7 +276,8 @@ const SpotViewer = forwardRef(function SpotViewer({
           camera.position.copy(controls.target).add(offset);
           controls.update();
         }
-        model.pose({ stance: p.stance, time, speed: p.speed, bodyHeight: p.bodyHeight, moving: p.stance === 'walk' });
+        model.pose({ stance: p.stance, time, speed: p.speed, bodyHeight: p.bodyHeight, moving: gait > 0, gait, sit: sitAmt });
+        placeFloor();
         renderer.render(scene, camera);
         placeMarkers();
         lastDraw = now;
@@ -321,8 +382,7 @@ const SpotViewer = forwardRef(function SpotViewer({
       controls.dispose();
       payloads.dispose();
       model.dispose();
-      grid.geometry.dispose();
-      grid.material.dispose();
+      disposeFloor();
       shadow.geometry.dispose();
       shadow.material.dispose();
       shadowTexture.dispose();
@@ -364,5 +424,4 @@ const SpotViewer = forwardRef(function SpotViewer({
       {error && <div className="viewer-error" role="alert"><strong>Let’s get Spot back on screen.</strong><p>{error}</p><button onClick={() => window.location.reload()}>Reload viewer</button></div>}
     </div>
   );
-});
-export default SpotViewer;
+}

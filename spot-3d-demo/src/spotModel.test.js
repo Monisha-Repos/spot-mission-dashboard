@@ -42,3 +42,31 @@ test('walk lifts feet, changes joints, and stays finite across supported poses',
   }
   model.dispose();
 });
+
+test('sitting down lowers the rear first and keeps the feet near the floor the whole way', () => {
+  const model = createSpotModel();
+  for (const sit of [0.1, 0.3, 0.5, 0.7, 0.9]) {
+    model.pose({ stance: 'sit', sit });
+    model.root.updateMatrixWorld(true);
+    if (sit < 0.9) assert.ok(model.body.rotation.z > 0, `rear should be lower at sit=${sit}`);
+    for (const { foot } of model.legs) {
+      const y = foot.getWorldPosition(new Vector3()).y;
+      assert.ok(Math.abs(y - 0.033) < 0.02, `foot at ${y} mid-sit (${sit})`);
+    }
+  }
+  model.dispose();
+});
+
+test('walking forward: feet push backward on the ground and swing forward in the air', () => {
+  const model = createSpotModel();
+  const foot = model.legs[0].foot;
+  const at = t => { model.pose({ stance: 'walk', time: t, moving: true }); model.root.updateMatrixWorld(true); return foot.getWorldPosition(new Vector3()); };
+  let ground = 0, air = 0;
+  for (let t = 0; t < 1.6; t += 0.02) {
+    const a = at(t), b = at(t + 0.01);
+    if (Math.max(a.y, b.y) < 0.0335) { ground++; assert.ok(b.x <= a.x + 1e-6, `grounded foot moved forward at t=${t.toFixed(2)}`); }
+    else if (Math.min(a.y, b.y) > 0.06) { air++; assert.ok(b.x >= a.x - 1e-6, `airborne foot moved backward at t=${t.toFixed(2)}`); }
+  }
+  assert.ok(ground > 5 && air > 5);
+  model.dispose();
+});
