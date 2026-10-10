@@ -1,4 +1,4 @@
-import React, { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
+import React, { Suspense, lazy, useMemo, useRef, useState } from 'react';
 import { asset, useApi } from '../api.js';
 import { Async, Badge, Bars, Section, Segmented, Stat } from '../components/ui.jsx';
 import InclinedMap from '../components/InclinedMap.jsx';
@@ -7,22 +7,11 @@ import { formatTime, num, pct, reading, severityTone, titleCase, tone } from '..
 const SpotViewer = lazy(() => import('../SpotViewer.jsx'));
 
 const PART_ORDER = ['thermal_camera', 'ptz_camera', 'microphone', 'legs_and_body_cameras', 'radio', 'battery'];
+const PART_LABELS = { thermal_camera: 'Thermal camera', ptz_camera: 'Visual camera', microphone: 'Acoustic sensor', legs_and_body_cameras: 'Mobility & stereo', radio: 'Radio & comms', battery: 'Battery' };
 const PART_IMAGES = {
   thermal_camera: 'thermal_pump_bearing_01.jpg', ptz_camera: 'visual_pump_motor_01.jpg',
   microphone: 'acoustic_valve_01.jpg', legs_and_body_cameras: 'pipe_gallery_01.jpg',
 };
-
-/** True on screens wide enough for the hero copy to sit beside the robot. */
-function useWide(query = '(min-width: 761px)') {
-  const [wide, setWide] = useState(() => window.matchMedia(query).matches);
-  useEffect(() => {
-    const m = window.matchMedia(query);
-    const on = () => setWide(m.matches);
-    m.addEventListener('change', on);
-    return () => m.removeEventListener('change', on);
-  }, [query]);
-  return wide;
-}
 
 function partTone(p) {
   if (!p) return 'muted';
@@ -71,9 +60,23 @@ function PartPanel({ id, onClose }) {
   );
 }
 
-function WaypointPanel({ id }) {
+function WaypointPanel({ id, waypoints, floor, onSelect }) {
   const state = useApi(id ? `/waypoints/${id}` : null);
-  if (!id) return <p className="muted map-hint">Pick a waypoint to see what Spot found there.</p>;
+  if (!id) return (
+    <div className="waypoint-directory">
+      <p className="eyebrow">Floor {floor} · Inspection points</p>
+      <h3>Select a location</h3>
+      <p className="muted">Open a waypoint to review readings, evidence, and follow-up actions.</p>
+      <ul>
+        {waypoints.filter(w => w.floor === floor).map(w => (
+          <li key={w.id}><button type="button" onClick={() => onSelect(w.id)}>
+            <span className={`dot tone-${tone(w.status)}`} aria-hidden="true" />
+            <code>{w.id}</code><span>{w.name}</span><span className="sr-only">{w.status}</span><span aria-hidden="true">↗</span>
+          </button></li>
+        ))}
+      </ul>
+    </div>
+  );
   return (
     <Async state={state}>
       {w => {
@@ -109,120 +112,149 @@ function WaypointPanel({ id }) {
   );
 }
 
-export default function Overview({ theme, context, setContext, onReplay }) {
+export default function Overview({ theme, context, setContext, onReplay, onOperator }) {
   const summary = useApi('/summary');
   const waypoints = useApi('/waypoints');
   const parts = useApi('/parts');
   const [stance, setStance] = useState('stand');
   const [autoRotate, setAutoRotate] = useState(false);
   const [wireframe, setWireframe] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   const viewer = useRef(null);
-  const wide = useWide();
+  const mapSection = useRef(null);
   const part = context.part || null;
   const floor = context.floor || 1;
   const partStatus = useMemo(() => Object.fromEntries((parts.data || []).map(p => [p.id, partTone(p)])), [parts.data]);
   const setPart = id => setContext(c => ({ ...c, part: id || undefined }));
+  const selectWaypoint = id => setContext(c => ({ ...c, waypoint: id || undefined }));
+  const locateFinding = r => {
+    setContext(c => ({ ...c, floor: r.location.floor, waypoint: r.location.id }));
+    mapSection.current?.scrollIntoView({ block: 'start', behavior: 'instant' });
+    mapSection.current?.focus({ preventScroll: true });
+  };
 
   const k = summary.data?.kpis;
+  const latest = summary.data?.latest_mission;
   return (
     <>
-      <section className="hero" aria-label="Spot 3D model">
-        <div className="stage">
-          <Suspense fallback={<div className="skeleton stage-skeleton" aria-label="Loading 3D model" />}>
-            <SpotViewer
-              ref={viewer}
-              theme={theme}
-              hotspots
-              focusPart={part}
-              onPartSelect={setPart}
-              partStatus={partStatus}
-              stance={stance}
-              autoRotate={autoRotate && !part}
-              shiftX={wide && !part ? 0.12 : 0}
-              wireframe={wireframe}
-            />
-          </Suspense>
-          <div className="hero-copy">
-            <p className="eyebrow">Autonomous inspection · Spot</p>
-            <h1>Spot at work</h1>
-            <p className="lead">{summary.data?.latest_mission
-              ? <>Latest mission <strong>{summary.data.latest_mission.mission_id}</strong> ({summary.data.latest_mission.configuration_version}): {summary.data.latest_mission.headline}.</>
-              : 'Click a part of the robot to see what it measured.'}</p>
-            {summary.data?.latest_mission && onReplay && (
-              <button type="button" className="btn btn-accent btn-sm hero-replay" onClick={() => onReplay(summary.data.latest_mission.mission_id)}>
-                Replay this run
-              </button>
-            )}
+      <header className="page-head overview-head">
+        <div>
+          <p className="eyebrow">Mission operations</p>
+          <h1>Mission overview</h1>
+          <p className="lead">Review inspection results and prioritize follow-up.</p>
+        </div>
+        <div className="page-actions">
+          <span className="data-scope">Synthetic dataset</span>
+          <button type="button" className="btn btn-accent" onClick={onOperator}>Review issue queue <span aria-hidden="true">↗</span></button>
+        </div>
+      </header>
+
+      <section className="overview-summary" aria-label="Performance across all missions">
+        <div className="summary-caption"><span>Across all missions</span><span>{summary.data?.loaded_at ? `Data loaded ${formatTime(summary.data.loaded_at)}` : summary.error ? 'Data unavailable' : 'Loading mission data'}</span></div>
+        <Async state={summary}>
+          {s => (
+            <div className="stat-grid">
+              <Stat label="Open issues" value={s.ops?.open_issues ?? '—'} sub={s.ops ? `${s.ops.pending_alarms} alarms awaiting a decision` : 'Operator console unavailable'} tone={s.ops?.open_issues ? 'warn' : undefined} />
+              <Stat label="Action success" value={pct(k.all.action_success_pct)} sub={`V1 ${pct(k.V1?.action_success_pct)} → V2 ${pct(k.V2?.action_success_pct)}`} />
+              <Stat label="Mission completion" value={pct(k.all.mission_completion_pct)} sub={`${k.all.missions} recorded missions`} />
+              <Stat label="Inspection findings" value={k.all.anomalies} sub={`${k.all.serious_anomalies} high or critical`} />
+              <Stat label="Avg. battery used" value={pct(k.all.avg_battery_drain_pct, 0)} sub={`Per mission · V2 ${pct(k.V2?.avg_battery_drain_pct, 0)}`} />
+            </div>
+          )}
+        </Async>
+        {latest && <div className="latest-mission">
+          <div className="mission-identity"><span className="eyebrow">Latest mission</span><strong>{latest.mission_id}</strong><Badge>{latest.configuration_version}</Badge></div>
+          <div className="mission-summary"><span>{latest.headline}</span><time dateTime={latest.end_time}>{formatTime(latest.end_time)} · {latest.duration_min} min</time></div>
+          <Badge tone={latest.mission_status === 'FAILED' ? 'bad' : 'muted'}>{titleCase(latest.mission_status)}</Badge>
+          <button type="button" className="btn btn-ghost btn-sm" onClick={() => onReplay(latest.mission_id)}>Replay mission <span aria-hidden="true">→</span></button>
+        </div>}
+      </section>
+
+      <div className={`overview-workspace${expanded ? ' explorer-expanded' : ''}`}>
+        <Section eyebrow="Inspection review" title="Priority findings" id="attention" className="workspace-panel findings-panel" actions={<span className="panel-meta">Highest severity first</span>}>
+          <p className="panel-description">Top findings across recorded missions. Track resolution in the issue queue.</p>
+          <Async state={summary}>
+            {s => s.needs_attention.length ? (
+              <ul className="attention">
+                {s.needs_attention.map(r => (
+                  <li key={r.record_id}>
+                    <div className="finding-heading"><Badge tone={severityTone(r.anomaly?.severity)}>{r.anomaly?.severity || 'FAILED'}</Badge><strong>{r.asset.name}</strong><span className="finding-reading">{reading(r.reading)}</span></div>
+                    <p className="finding-location">{r.location.id} · {r.location.name} · {r.mission_id}</p>
+                    <details className="finding-evidence"><summary>{titleCase(r.anomaly?.type || r.failure_type || r.action_type)}<span>Details</span></summary><p>{r.explanation}</p></details>
+                    <div className="finding-action"><p>{r.recommended_action}</p><button type="button" className="text-btn" onClick={() => locateFinding(r)} aria-label={`Locate ${r.asset.name} at ${r.location.id}`}>Locate <span aria-hidden="true">↗</span></button></div>
+                  </li>
+                ))}
+              </ul>
+            ) : <p className="empty-state">No priority findings in the recorded missions.</p>}
+          </Async>
+          <button type="button" className="panel-link" onClick={onOperator}>Open issue queue <span aria-hidden="true">→</span></button>
+        </Section>
+
+        <Section eyebrow="Robot & payloads" title="Spot explorer" id="explorer" className="workspace-panel explorer-panel" actions={<button type="button" className="btn btn-ghost btn-sm" aria-expanded={expanded} onClick={() => setExpanded(v => !v)}>{expanded ? 'Compact view' : 'Expand view'}</button>}>
+          <div className="stage">
+            <Suspense fallback={<div className="skeleton stage-skeleton" aria-label="Loading 3D model" />}>
+              <SpotViewer
+                ref={viewer}
+                theme={theme}
+                hotspots
+                focusPart={part}
+                onPartSelect={setPart}
+                partStatus={partStatus}
+                stance={stance}
+                autoRotate={autoRotate && !part}
+                wireframe={wireframe}
+              />
+            </Suspense>
+            <span className="viewer-caption">Interactive 3D · Drag to orbit</span>
+          </div>
+          <div className="explorer-tools">
+            <div className="explorer-instruction"><span>Select a part to inspect its results</span>{part && <button type="button" className="text-btn" onClick={() => setPart(null)}>Reset view</button>}</div>
             <div className="part-picker" role="group" aria-label="Robot parts">
               {PART_ORDER.map(id => {
                 const p = parts.data?.find(x => x.id === id);
                 return (
                   <button key={id} type="button" className={`chip tone-${partStatus[id] || 'muted'}`} aria-pressed={part === id} onClick={() => setPart(part === id ? null : id)}>
-                    <span className="dot" aria-hidden="true" />{p ? p.name.split(' (')[0] : titleCase(id)}
+                    <span className="dot" aria-hidden="true" />{PART_LABELS[id]}<span className="sr-only">{p ? `: ${partStatus[id] === 'bad' ? 'Action findings' : partStatus[id] === 'warn' ? 'Watch findings' : 'Normal results'}` : ': Results unavailable'}</span>
                   </button>
                 );
               })}
             </div>
-          </div>
-          <div className="stage-controls">
-            <Segmented label="Pose" options={[['stand', 'Stand'], ['sit', 'Sit'], ['walk', 'Walk']]} value={stance} onChange={setStance} />
-            <button type="button" className="btn btn-ghost btn-sm" aria-pressed={autoRotate} onClick={() => setAutoRotate(v => !v)}>Rotate</button>
-            <button type="button" className="btn btn-ghost btn-sm" aria-pressed={wireframe} onClick={() => setWireframe(v => !v)}>Wireframe</button>
-            <button type="button" className="btn btn-ghost btn-sm" onClick={() => viewer.current?.exportGLB()}>Export GLB</button>
+            <p className="model-note">Colors reflect inspection results, not robot health.</p>
+            <details className="model-options">
+              <summary>Model controls</summary>
+              <div className="stage-controls">
+                <Segmented label="Pose" options={[['stand', 'Stand'], ['sit', 'Sit'], ['walk', 'Walk']]} value={stance} onChange={setStance} />
+                <button type="button" className="btn btn-ghost btn-sm" aria-pressed={autoRotate} onClick={() => setAutoRotate(v => !v)}>Rotate</button>
+                <button type="button" className="btn btn-ghost btn-sm" aria-pressed={wireframe} onClick={() => setWireframe(v => !v)}>Wireframe</button>
+                <button type="button" className="btn btn-ghost btn-sm" onClick={() => viewer.current?.exportGLB()}>Export GLB</button>
+              </div>
+            </details>
           </div>
           {part && <PartPanel id={part} onClose={() => setPart(null)} />}
-        </div>
-      </section>
+        </Section>
+      </div>
 
-      <Section eyebrow="Across all missions" title="How Spot is doing" id="kpis">
-        <Async state={summary}>
-          {() => (
-            <div className="stat-grid">
-              <Stat label="Action success" value={pct(k.all.action_success_pct)} sub={`V1 ${pct(k.V1?.action_success_pct)} → V2 ${pct(k.V2?.action_success_pct)}`} tone="accent" />
-              <Stat label="Missions completed" value={pct(k.all.mission_completion_pct)} sub={`${k.all.missions} missions`} />
-              <Stat label="Findings" value={k.all.anomalies} sub={`${k.all.serious_anomalies} high or critical`} />
-              <Stat label="Battery used per mission" value={pct(k.all.avg_battery_drain_pct, 0)} sub={`V1 ${pct(k.V1?.avg_battery_drain_pct, 0)} → V2 ${pct(k.V2?.avg_battery_drain_pct, 0)}`} />
-              <Stat label="Open issues" value={summary.data.ops?.open_issues ?? '—'} sub={summary.data.ops ? `${summary.data.ops.pending_alarms} alarms waiting` : 'Operator console off'} />
+      <div className="map-target" ref={mapSection} tabIndex={-1} aria-label="Facility inspection map">
+        <Section eyebrow="Facility" title="Inspection map" id="map" className="map-section" actions={<span className="panel-meta">Schematic · Status from recent missions</span>}>
+          <div className="map-layout">
+            <Async state={waypoints}>
+              {wps => (
+                <InclinedMap
+                  waypoints={wps}
+                  floor={floor}
+                  onFloor={f => setContext(c => ({ ...c, floor: f, waypoint: undefined }))}
+                  selected={context.waypoint}
+                  onSelect={selectWaypoint}
+                />
+              )}
+            </Async>
+            <div className="map-side">
+              {context.waypoint && <button type="button" className="text-btn back-locations" onClick={() => selectWaypoint(null)}>← All locations on floor {floor}</button>}
+              <WaypointPanel id={context.waypoint} waypoints={waypoints.data || []} floor={floor} onSelect={selectWaypoint} />
             </div>
-          )}
-        </Async>
-      </Section>
-
-      <Section eyebrow="Facility" title="Where Spot looked" id="map" className="map-section">
-        <div className="map-layout">
-          <Async state={waypoints}>
-            {wps => (
-              <InclinedMap
-                waypoints={wps}
-                floor={floor}
-                onFloor={f => setContext(c => ({ ...c, floor: f, waypoint: undefined }))}
-                selected={context.waypoint}
-                onSelect={id => setContext(c => ({ ...c, waypoint: id || undefined }))}
-              />
-            )}
-          </Async>
-          <div className="map-side"><WaypointPanel id={context.waypoint} /></div>
-        </div>
-      </Section>
-
-      <Section eyebrow="Needs attention" title="Top findings" id="attention">
-        <Async state={summary} empty="Nothing needs action right now.">
-          {s => (
-            <ul className="attention">
-              {s.needs_attention.map(r => (
-                <li key={r.record_id}>
-                  <button type="button" className="attention-item" onClick={() => setContext(c => ({ ...c, floor: r.location.floor, waypoint: r.location.id }))}>
-                    <Badge tone={severityTone(r.anomaly?.severity)}>{r.anomaly?.severity || 'FAILED'}</Badge>
-                    <strong>{r.asset.name}</strong>
-                    <span className="muted">{r.location.id} {r.location.name} · {r.mission_id} · {reading(r.reading)}</span>
-                    <span className="attention-text">{r.explanation}</span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Async>
-      </Section>
+          </div>
+        </Section>
+      </div>
     </>
   );
 }

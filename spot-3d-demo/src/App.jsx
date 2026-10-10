@@ -8,8 +8,8 @@ import AskPanel from './components/AskPanel.jsx';
 import AlarmCenter from './components/AlarmCenter.jsx';
 import { createSiren } from './lib/siren.js';
 
-const TABS = [['overview', 'Overview'], ['replay', 'Replay'], ['scientist', 'Data Scientist'], ['operator', 'Operator']];
-const PLAIN_TABS = ['overview', 'replay'];
+const TABS = [['overview', 'Overview'], ['operator', 'Issue queue'], ['replay', 'Mission replay'], ['scientist', 'Analytics']];
+const PLAIN_TABS = ['overview', 'replay', 'operator'];
 
 function stored(key, fallback, allowed) {
   try {
@@ -67,6 +67,7 @@ export default function App() {
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 2h10l5 10-5 10H7L2 12z" /></svg>
             <span>spotat<b>.</b>work</span>
           </a>
+          <span className="workspace-label">Operations</span>
           <nav className="tabs" aria-label="Views">
             {TABS.map(([id, label]) => (
               <button key={id} type="button" className={tab === id ? 'is-on' : ''} aria-current={tab === id ? 'page' : undefined} onClick={() => setTab(id)}>
@@ -76,10 +77,11 @@ export default function App() {
           </nav>
           <div className="topbar-tools">
             <span className={`live live-${stream}`} title={`Live ingest stream: ${stream}`}>
-              <i aria-hidden="true" />{stream === 'live' ? 'Live' : stream === 'offline' ? 'Offline' : '…'}
+              <i aria-hidden="true" />{stream === 'live' ? 'Live updates' : stream === 'offline' ? 'Updates offline' : 'Connecting'}
             </span>
-            <button type="button" className={`btn btn-sm ${siren ? 'btn-ghost' : 'btn-accent'}`} onClick={arm} aria-pressed={siren ? muted : undefined}>
-              {!siren ? 'Arm alarms 🔊' : muted ? 'Unmute' : 'Mute'}
+            <button type="button" className="btn btn-sm btn-ghost alarm-toggle" onClick={arm} aria-pressed={Boolean(siren) && !muted} title="Enable or mute the audible alarm. Visual alerts remain active.">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4V5Z" /><path d={siren && !muted ? 'M15 8a6 6 0 0 1 0 8M18 5a10 10 0 0 1 0 14' : 'm16 9 6 6m0-6-6 6'} /></svg>
+              <span className="sound-label">{!siren ? 'Enable sound' : muted ? 'Sound muted' : 'Sound on'}</span>
             </button>
             <button
               type="button"
@@ -92,25 +94,25 @@ export default function App() {
                 ? <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4.5" /><path d="M12 1.5v3M12 19.5v3M1.5 12h3M19.5 12h3M4.6 4.6l2.1 2.1M17.3 17.3l2.1 2.1M4.6 19.4l2.1-2.1M17.3 6.7l2.1-2.1" /></svg>
                 : <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z" /></svg>}
             </button>
+            <AskPanel
+              mode={PLAIN_TABS.includes(tab) ? 'simple' : 'technical'}
+              context={tab === 'overview' ? context : tab === 'replay' ? { mission: replayMission } : {}}
+            />
           </div>
         </header>
 
         <main id="main" className={`main main-${tab}`}>
-          {tab === 'overview' && <Overview theme={theme} context={context} setContext={setContext} onReplay={openReplay} />}
+          {tab === 'overview' && <Overview theme={theme} context={context} setContext={setContext} onReplay={openReplay} onOperator={() => setTab('operator')} />}
           {tab === 'replay' && <Replay missionId={replayMission} onMission={setReplayMission} />}
           {tab === 'scientist' && <DataScientist />}
           {tab === 'operator' && <OpsConsole />}
         </main>
 
         <footer className="footer">
-          <span>spotat.work · Knight Hacks 2026</span>
-          <span className="muted">Synthetic challenge data · stylized 3D model, not official Boston Dynamics CAD</span>
+          <span>spotat.work <span className="muted">/ Mission operations</span></span>
+          <span className="muted">Knight Hacks 2026 · Synthetic challenge data · Stylized Spot model</span>
         </footer>
 
-        <AskPanel
-          mode={PLAIN_TABS.includes(tab) ? 'simple' : 'technical'}
-          context={tab === 'overview' ? context : tab === 'replay' ? { mission: replayMission } : {}}
-        />
       </div>
       <AlarmCenter siren={siren} muted={muted} onMute={() => setMuted(m => !m)} onActive={setAlarm} onStream={setStream} />
     </AppContext.Provider>

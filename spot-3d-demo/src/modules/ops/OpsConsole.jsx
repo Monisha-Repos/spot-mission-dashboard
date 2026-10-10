@@ -328,18 +328,20 @@ function Activity() {
 export default function OpsConsole() {
   const { session, setSession } = useApp();
   const [view, setView] = useState('issues');
+  const [showSignIn, setShowSignIn] = useState(false);
   const health = useApi('/health');
   const kpis = useApi('/ops/kpis');
   if (health.data && !health.data.ops_enabled) {
-    return <Section title="Operator console is off"><p className="muted">Set <code>OPS_ENABLED=true</code> in <code>backend/.env</code> and restart the backend.</p></Section>;
+    return <Section title="Operator console unavailable"><p className="muted">Contact your system administrator to enable issue management.</p></Section>;
   }
   const o = kpis.data?.ops;
   return (
     <>
       <header className="page-head">
         <div>
-          <p className="eyebrow">Operator console</p>
-          <h1>Act on findings</h1>
+          <p className="eyebrow">Issue management</p>
+          <h1>Operator console</h1>
+          <p className="lead">Assign follow-ups, resolve issues, and review the shift history.</p>
         </div>
         {session && (
           <div className="page-actions">
@@ -348,7 +350,11 @@ export default function OpsConsole() {
           </div>
         )}
       </header>
-      {!session && <Section eyebrow="Sign in" title="Operator sign-in"><LoginForm /></Section>}
+      {!session && <Section><div className="operator-signin">
+        <div><strong>Viewing as a guest</strong><p>Sign in to assign issues, record decisions, and save snapshots.</p></div>
+        <button type="button" className="btn btn-ghost btn-sm" aria-expanded={showSignIn} onClick={() => setShowSignIn(v => !v)}>{showSignIn ? 'Close sign-in' : 'Operator sign-in'}</button>
+        {showSignIn && <LoginForm compact />}
+      </div></Section>}
       {o && (
         <div className="stat-grid">
           <Stat label="Open issues" value={o.open_issues} sub={`${o.issues} total`} tone={o.open_issues ? 'warn' : 'ok'} />

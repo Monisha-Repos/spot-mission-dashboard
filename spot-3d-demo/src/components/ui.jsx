@@ -1,5 +1,4 @@
 import React from 'react';
-import { API_URL } from '../api.js';
 
 export function Section({ eyebrow, title, actions, children, className = '', id }) {
   return (
@@ -52,15 +51,16 @@ export function Async({ state, children, empty = 'Nothing to show yet.' }) {
   if (state.error && !state.data) {
     return (
       <div className="note note-error" role="alert">
-        <strong>Couldn’t load this.</strong> {state.error.message}
-        {state.error.status === 0 && <> Start it with <code>uvicorn app.main:create_app --factory --port 8000</code> in <code>backend/</code>, or set <code>VITE_API_URL</code> (now {API_URL}).</>}
+        <strong>Data unavailable.</strong> {state.error.status === 0 ? 'Check your connection or contact your system administrator.' : state.error.message}
         {state.reload && <button type="button" className="btn btn-ghost btn-sm" onClick={state.reload}>Retry</button>}
       </div>
     );
   }
   if (!state.data) return <div className="skeleton" aria-busy="true" aria-label="Loading" />;
-  if (Array.isArray(state.data) && !state.data.length) return <p className="muted">{empty}</p>;
-  return children(state.data);
+  return <>
+    {state.error && <div className="note note-error" role="status">Couldn’t refresh. Showing the last available data.{state.reload && <button type="button" className="btn btn-ghost btn-sm" onClick={state.reload}>Retry</button>}</div>}
+    {Array.isArray(state.data) && !state.data.length ? <p className="muted">{empty}</p> : children(state.data)}
+  </>;
 }
 
 /** Horizontal bars for a {label: count} map. */

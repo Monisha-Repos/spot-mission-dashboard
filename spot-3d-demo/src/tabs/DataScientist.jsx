@@ -264,11 +264,12 @@ export default function DataScientist() {
     <>
       <header className="page-head">
         <div>
-          <p className="eyebrow">Technical view</p>
-          <h1>Data scientist</h1>
+          <p className="eyebrow">Performance & evidence</p>
+          <h1>Mission analytics</h1>
+          <p className="lead">Compare configurations, investigate failures, and export mission data.</p>
         </div>
         <div className="page-actions">
-          <button type="button" className="btn btn-accent" onClick={pdf} disabled={busy || !summary.data}>{busy ? 'Building PDF…' : 'Generate PDF'}</button>
+          <button type="button" className="btn btn-accent" onClick={pdf} disabled={busy || !summary.data}>{busy ? 'Building PDF…' : 'Export PDF report'}</button>
           {pdfError && <p className="note note-error" role="alert">{pdfError}</p>}
         </div>
       </header>

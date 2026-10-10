@@ -16,7 +16,7 @@ function contextLabel(ctx) {
   return parts.join(' · ');
 }
 
-/** Bottom-right assistant shared by every tab. mode: simple (Overview) or technical (Data Scientist, Operator). */
+/** Header assistant shared by every view; analytics uses technical language. */
 export default function AskPanel({ mode, context }) {
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState([]);
@@ -24,6 +24,8 @@ export default function AskPanel({ mode, context }) {
   const [busy, setBusy] = useState(false);
   const log = useRef(null);
   const input = useRef(null);
+  const trigger = useRef(null);
+  function close() { setOpen(false); trigger.current?.focus(); }
   useEffect(() => { log.current?.scrollTo(0, log.current.scrollHeight); }, [messages, busy]);
   useEffect(() => { if (open) input.current?.focus(); }, [open]);
 
@@ -48,13 +50,13 @@ export default function AskPanel({ mode, context }) {
   return (
     <div className={`ask${open ? ' is-open' : ''}`}>
       {open && (
-        <section className="ask-panel" role="dialog" aria-label="AI assistant" onKeyDown={e => { if (e.key === 'Escape') setOpen(false); }}>
+        <section className="ask-panel" role="dialog" aria-label="AI assistant" onKeyDown={e => { if (e.key === 'Escape') close(); }}>
           <header className="ask-head">
             <div>
               <p className="eyebrow">AI assistant · {mode === 'technical' ? 'technical' : 'plain language'}</p>
               {where && <p className="ask-context">Looking at: {where}</p>}
             </div>
-            <button type="button" className="icon-btn" onClick={() => setOpen(false)} aria-label="Close assistant">✕</button>
+            <button type="button" className="icon-btn" onClick={close} aria-label="Close assistant">✕</button>
           </header>
           <div className="ask-log" ref={log} aria-live="polite">
             {!messages.length && (
@@ -81,7 +83,7 @@ export default function AskPanel({ mode, context }) {
           </form>
         </section>
       )}
-      <button type="button" className="ask-fab" onClick={() => setOpen(o => !o)} aria-expanded={open} aria-label={open ? 'Close AI assistant' : 'Open AI assistant'}>AI</button>
+      <button ref={trigger} type="button" className="ask-fab" onClick={() => setOpen(o => !o)} aria-expanded={open} aria-label={open ? 'Close AI assistant' : 'Open AI assistant'} title="AI assistant">AI</button>
     </div>
   );
 }

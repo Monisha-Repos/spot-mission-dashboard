@@ -415,9 +415,9 @@ export default function Replay({ missionId, onMission }) {
     <>
       <header className="page-head">
         <div>
-          <p className="eyebrow">Mission replay</p>
-          <h1>Replay a run</h1>
-          <p className="lead">Pick a run and press play to follow Spot stop by stop. Anything it found is pinned to the timeline with the time it happened.</p>
+          <p className="eyebrow">Recorded inspections</p>
+          <h1>Mission replay</h1>
+          <p className="lead">Follow a recorded mission, inspect each stop, and jump to findings on the timeline.</p>
         </div>
       </header>
 
