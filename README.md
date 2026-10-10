@@ -1,0 +1,163 @@
+# SPOT Mission Dashboard
+
+**Turn Boston Dynamics SPOT robot mission data into something any plant operator can read, trust, and act on.**
+
+Built for the **NextEra Energy: SPOT Management Dashboard** hackathon track.
+
+---
+
+## The Problem
+
+SPOT walks the plant floor collecting thermal images, gauge readings, acoustic data, and photos at dozens of inspection points. The raw output is mission logs, waypoint IDs, and sensor payloads. That format suits robotics engineers, but it doesn't help an operator who needs to know three things:
+
+1. **Is anything wrong?**
+2. **Where is it?**
+3. **What should I do about it?**
+
+If operators can't answer those questions quickly, they don't trust the robot, and SPOT's inspections end up ignored or repeated by hand.
+
+## Our Solution
+
+A dashboard that translates every SPOT mission into plain operator language, **live while the robot walks** and **as a full report after it returns**.
+
+| Operator question | What the dashboard shows |
+|---|---|
+| *Where is SPOT right now?* | Live position on a plant map with the route walked so far and the inspection points still ahead |
+| *What did it see?* | Each inspection point as a card with location, timestamp, reading, photo or thermal image, and the normal range |
+| *Is anything wrong?* | Color-coded anomaly flags (🟢 Normal · 🟡 Watch · 🔴 Action needed), each with a one-line plain-English explanation |
+| *What should I do?* | A recommended next step for every flagged item, for example "Temperature on Pump 3 bearing is 18 °C above baseline. Schedule a manual check." |
+| *Can I trust this?* | Trends from past missions, confidence indicators, and the raw evidence (image or value) beside every flag |
+
+## Key Features
+
+### 🔴 Real-Time Mission View
+- Live map of SPOT's position, path, and upcoming waypoints
+- Readings stream in as each inspection point is captured
+- Anomaly alerts appear the moment they're detected, not after the mission ends
+- Mission progress bar: points completed, time elapsed, battery level
+
+### 📋 Post-Mission Report
+- Mission summary at the top: *"42 points inspected · 39 normal · 2 watch · 1 needs action"*
+- A timeline of every reading with filters by area, asset, sensor type, or severity
+- One-click export (PDF or CSV) for shift handoffs and maintenance tickets
+
+### ⚠️ Anomaly Detection That Explains Itself
+- Threshold checks against each asset's expected operating range
+- Comparison to that asset's own history, so the system catches drift before it crosses a hard limit
+- Every flag answers **what** is abnormal, **by how much**, and **compared to what**, with no unexplained "anomaly score"
+
+### 📈 Building Operator Confidence
+- Per-asset trend charts across missions show that SPOT's readings are consistent over time
+- Every flag links to the evidence SPOT captured (image, thermal frame, raw value)
+- Operators can mark flags as *confirmed* or *false alarm*, which builds a track record and tunes future alerts
+
+### 🧑‍🏭 Designed for Operators, Not Engineers
+- No robotics jargon: "Boiler Room, Gauge 4" instead of `waypoint_0x3fa2`
+- Color and severity carry the meaning, and text explains it
+- Large touch targets and high contrast for tablets on the plant floor
+
+## How It Works
+
+```
+┌──────────────┐     ┌──────────────────┐     ┌───────────────────┐     ┌──────────────┐
+│  SPOT Robot  │────▶│  Ingestion Layer │────▶│  Analysis Engine  │────▶│  Dashboard   │
+│  (missions,  │     │  normalize data, │     │  thresholds, trend│     │  live view + │
+│  sensor data)│     │  map waypoints → │     │  baselines, plain-│     │  post-mission│
+│              │     │  named locations │     │  language flags   │     │  report      │
+└──────────────┘     └──────────────────┘     └───────────────────┘     └──────────────┘
+```
+
+1. **Ingest:** Load SPOT mission data (live stream or exported mission files) and normalize it into one schema.
+2. **Translate:** Map waypoints and asset IDs to human-readable plant locations.
+3. **Analyze:** Compare each reading to its expected range and to its own history, then classify it as Normal, Watch, or Action needed.
+4. **Explain:** Write a short plain-language explanation and a recommended action for each flag.
+5. **Present:** Show it all on the live map, the inspection cards, and the mission report.
+
+### Core Data Model
+
+Every SPOT reading becomes an **Inspection Record**:
+
+| Field | Example |
+|---|---|
+| `mission_id` | `2026-10-10-morning-route` |
+| `timestamp` | `2026-10-10T08:14:32Z` |
+| `location` | `Turbine Hall › Pump 3 › Bearing` |
+| `position` | `(x, y)` on the plant map |
+| `sensor_type` | `thermal` · `gauge` · `acoustic` · `visual` |
+| `reading` | `87.4 °C` |
+| `expected_range` | `55 – 70 °C` |
+| `status` | `normal` · `watch` · `action` |
+| `explanation` | "17 °C above normal operating range" |
+| `recommended_action` | "Schedule a manual inspection of the bearing" |
+| `evidence` | Link to the thermal image or photo |
+
+## Tech Stack
+
+| Layer | Technology |
+|---|---|
+| Backend / data processing | Python |
+| API | _TBD_ |
+| Frontend | _TBD_ |
+| Real-time updates | _TBD_ |
+| Visualization | _TBD_ |
+
+> Fill this in as the stack is finalized.
+
+## Getting Started
+
+```bash
+# Clone the repository
+git clone https://github.com/Monisha-Repos/Spot-Mission-Dashboard.git
+cd Spot-Mission-Dashboard
+
+# Setup and run instructions coming soon
+```
+
+## Project Structure
+
+_Coming soon._
+
+## Demo
+
+_Screenshots, a demo video, and a walkthrough of a sample mission go here._
+
+**Suggested demo flow for judges:**
+1. Start a simulated SPOT mission and watch readings appear on the live map
+2. Watch an anomaly get flagged in real time with its explanation
+3. Open the post-mission report and drill into the flagged asset's history
+4. Mark the flag as confirmed and export the shift-handoff report
+
+## Roadmap
+
+- [ ] Ingest NextEra-provided SPOT mission data
+- [ ] Normalize data into the Inspection Record schema
+- [ ] Plant map with SPOT position and route
+- [ ] Inspection cards with readings, timestamps, and evidence
+- [ ] Threshold-based anomaly flags
+- [ ] Historical baseline and trend comparison
+- [ ] Plain-language explanations and recommended actions
+- [ ] Real-time mission streaming (live or simulated)
+- [ ] Post-mission summary report and export
+- [ ] Operator feedback on flags (confirmed / false alarm)
+
+## Why This Wins for Operators
+
+- **Clear:** Operators get answers instead of data dumps. Every screen answers "what's wrong, where, and what now?"
+- **Actionable:** Every flag comes with a next step.
+- **Trustworthy:** Evidence and history sit beside every flag, so confidence comes from what operators can see for themselves.
+- **No expertise needed:** An operator on their first day can read a mission report.
+
+## Acknowledgments
+
+- **NextEra Energy** for the challenge and the SPOT mission data resources
+- **Boston Dynamics** for SPOT
+
+## Team
+
+| Name | Role |
+|---|---|
+| Monisha Natarajan | _Role_ |
+
+## License
+
+_TBD_
