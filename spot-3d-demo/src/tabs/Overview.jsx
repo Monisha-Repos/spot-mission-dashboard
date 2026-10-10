@@ -97,7 +97,7 @@ function WaypointPanel({ id }) {
   );
 }
 
-export default function Overview({ theme, context, setContext }) {
+export default function Overview({ theme, context, setContext, onReplay }) {
   const summary = useApi('/summary');
   const waypoints = useApi('/waypoints');
   const parts = useApi('/parts');
@@ -134,6 +134,11 @@ export default function Overview({ theme, context, setContext }) {
             <p className="lead">{summary.data?.latest_mission
               ? <>Latest mission <strong>{summary.data.latest_mission.mission_id}</strong> ({summary.data.latest_mission.configuration_version}): {summary.data.latest_mission.headline}.</>
               : 'Click a part of the robot to see what it measured.'}</p>
+            {summary.data?.latest_mission && onReplay && (
+              <button type="button" className="btn btn-accent btn-sm hero-replay" onClick={() => onReplay(summary.data.latest_mission.mission_id)}>
+                Replay this run
+              </button>
+            )}
             <div className="part-picker" role="group" aria-label="Robot parts">
               {PART_ORDER.map(id => {
                 const p = parts.data?.find(x => x.id === id);

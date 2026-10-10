@@ -1,13 +1,15 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { AppContext, loadSession, saveSession } from './api.js';
 import Overview from './tabs/Overview.jsx';
+import Replay from './tabs/Replay.jsx';
 import DataScientist from './tabs/DataScientist.jsx';
 import OpsConsole from './modules/ops/OpsConsole.jsx';
 import AskPanel from './components/AskPanel.jsx';
 import AlarmCenter from './components/AlarmCenter.jsx';
 import { createSiren } from './lib/siren.js';
 
-const TABS = [['overview', 'Overview'], ['scientist', 'Data Scientist'], ['operator', 'Operator']];
+const TABS = [['overview', 'Overview'], ['replay', 'Replay'], ['scientist', 'Data Scientist'], ['operator', 'Operator']];
+const PLAIN_TABS = ['overview', 'replay'];
 
 function stored(key, fallback, allowed) {
   try {
@@ -29,6 +31,8 @@ export default function App() {
   const [version, setVersion] = useState(0);
   const [session, setSessionState] = useState(loadSession);
   const [context, setContext] = useState({ floor: 1 });
+  const [replayMission, setReplayMission] = useState(null);
+  const openReplay = useCallback(id => { if (id) setReplayMission(id); setTab('replay'); }, []);
   const [siren, setSiren] = useState(null);
   const [muted, setMuted] = useState(false);
   const [alarm, setAlarm] = useState(false);
@@ -92,7 +96,8 @@ export default function App() {
         </header>
 
         <main id="main" className={`main main-${tab}`}>
-          {tab === 'overview' && <Overview theme={theme} context={context} setContext={setContext} />}
+          {tab === 'overview' && <Overview theme={theme} context={context} setContext={setContext} onReplay={openReplay} />}
+          {tab === 'replay' && <Replay missionId={replayMission} onMission={setReplayMission} />}
           {tab === 'scientist' && <DataScientist />}
           {tab === 'operator' && <OpsConsole />}
         </main>
@@ -102,7 +107,10 @@ export default function App() {
           <span className="muted">Synthetic challenge data · stylized 3D model, not official Boston Dynamics CAD</span>
         </footer>
 
-        <AskPanel mode={tab === 'overview' ? 'simple' : 'technical'} context={tab === 'overview' ? context : {}} />
+        <AskPanel
+          mode={PLAIN_TABS.includes(tab) ? 'simple' : 'technical'}
+          context={tab === 'overview' ? context : tab === 'replay' ? { mission: replayMission } : {}}
+        />
       </div>
       <AlarmCenter siren={siren} muted={muted} onMute={() => setMuted(m => !m)} onActive={setAlarm} onStream={setStream} />
     </AppContext.Provider>

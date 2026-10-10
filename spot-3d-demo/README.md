@@ -6,6 +6,7 @@ React + Vite + Three.js. Three tabs, a shared AI assistant, and a live alarm, al
 | Tab | For | What's on it |
 |---|---|---|
 | **Overview** | Everyone | 3D Spot: click a part (or its chip) and the camera zooms in, with that part's data in plain language · KPIs · inclined two-floor map with an animated Floor 1 ↔ 2 swap, waypoints coloured by status · top findings |
+| **Replay** | Everyone | Pick any recorded run → play it back (30× / 60× / 120×) with Spot moving across both floors · timeline track with every finding pinned at the time it happened (click to jump, optional pause at each finding) · stop-by-stop list with result, explanation, next step and reference image. Reads `GET /missions/{id}` + `GET /missions/{id}/replay` |
 | **Data Scientist** | Technical users | V1 vs V2 with significance tests · failures per waypoint · model metrics, confusion matrix, CV, baselines · sortable/filterable missions, actions, readings and anomalies · **Generate PDF** |
 | **Operator** | Signed-in staff | Issue queue with filters → detail with status/assignee/note and audit trail · snapshots: KPI chart over time, save, compare two (▲/▼), export PDF · activity feed |
 

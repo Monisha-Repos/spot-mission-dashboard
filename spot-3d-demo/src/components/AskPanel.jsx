@@ -9,6 +9,7 @@ const SUGGESTIONS = {
 
 function contextLabel(ctx) {
   const parts = [];
+  if (ctx.mission) parts.push(`Run ${ctx.mission}`);
   if (ctx.part) parts.push(titleCase(ctx.part));
   if (ctx.waypoint) parts.push(ctx.waypoint);
   else if (ctx.floor) parts.push(`Floor ${ctx.floor}`);
