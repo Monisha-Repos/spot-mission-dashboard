@@ -1,4 +1,4 @@
-import React, { Suspense, lazy, useMemo, useRef, useState } from 'react';
+import React, { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
 import { asset, useApi } from '../api.js';
 import { Async, Badge, Bars, Section, Segmented, Stat } from '../components/ui.jsx';
 import InclinedMap from '../components/InclinedMap.jsx';
@@ -11,6 +11,18 @@ const PART_IMAGES = {
   thermal_camera: 'thermal_pump_bearing_01.jpg', ptz_camera: 'visual_pump_motor_01.jpg',
   microphone: 'acoustic_valve_01.jpg', legs_and_body_cameras: 'pipe_gallery_01.jpg',
 };
+
+/** True on screens wide enough for the hero copy to sit beside the robot. */
+function useWide(query = '(min-width: 761px)') {
+  const [wide, setWide] = useState(() => window.matchMedia(query).matches);
+  useEffect(() => {
+    const m = window.matchMedia(query);
+    const on = () => setWide(m.matches);
+    m.addEventListener('change', on);
+    return () => m.removeEventListener('change', on);
+  }, [query]);
+  return wide;
+}
 
 function partTone(p) {
   if (!p) return 'muted';
@@ -105,6 +117,7 @@ export default function Overview({ theme, context, setContext, onReplay }) {
   const [autoRotate, setAutoRotate] = useState(false);
   const [wireframe, setWireframe] = useState(false);
   const viewer = useRef(null);
+  const wide = useWide();
   const part = context.part || null;
   const floor = context.floor || 1;
   const partStatus = useMemo(() => Object.fromEntries((parts.data || []).map(p => [p.id, partTone(p)])), [parts.data]);
@@ -125,6 +138,7 @@ export default function Overview({ theme, context, setContext, onReplay }) {
               partStatus={partStatus}
               stance={stance}
               autoRotate={autoRotate && !part}
+              shiftX={wide && !part ? 0.12 : 0}
               wireframe={wireframe}
             />
           </Suspense>
