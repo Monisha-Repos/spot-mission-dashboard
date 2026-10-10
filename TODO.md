@@ -32,11 +32,11 @@ final commit, make repository public by **11 AM**
 
 ## 💡 Product Vision
 
-Two tabs, one AI assistant shared by both.
+Two public tabs and one AI assistant shared by both, plus a separate **Operator Console** module behind a sign-in (see below).
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│  [ Overview ]  [ Data Scientist ]                spotat.work │
+│  [ Overview ]  [ Data Scientist ]  [ Operator 🔒 ] spotat.work│
 ├──────────────────────────────────────────────────────────────┤
 │                                                              │
 │                  3D SPOT model (rotate / zoom)               │
@@ -73,6 +73,99 @@ Two tabs, one AI assistant shared by both.
 - Model performance: precision, recall, F1, PR-AUC, confusion matrix, cross-validation results
 - **Same AI popup**, switched to technical mode (exact numbers, field names, IDs)
 - **Generate PDF button**: snapshot of the current dashboard results with a timestamp, for archiving
+
+### Module: Operator Console (sign-in required, for the employee who acts on issues)
+The Overview and Data Scientist tabs **show** what happened. The Operator Console is where an employee **does something about it**, and where you can see whether things are getting better. It answers the brief's questions *"What requires attention?"*, *"What should an operator investigate next?"* and *"Is performance improving or degrading?"*
+
+**Kept separate on purpose:**
+- It has its own backend package (`backend/ops/`), its own frontend folder (`frontend/src/modules/ops/`) and its own SQLite file (`data/ops.db`).
+- It **reads** the shared Inspection Records but **never changes the source CSVs**. Everything an operator does goes into `ops.db`.
+- Nothing else depends on it. If it breaks, the Overview and Data Scientist tabs still work. It can be turned off with one flag (`OPS_ENABLED`).
+
+**Authority (who can act):**
+- A simple sign-in with a name, a role (`operator` / `supervisor`) and a shared PIN from `.env`. That's enough for a hackathon. Say in the Devpost that real deployments would use SSO.
+- Public tabs are read-only. Only signed-in users can change an issue's status or save a snapshot.
+- Every write records **who** made it and **when**.
+
+**1. Issue queue (handle raised errors)**
+- Issues are created from `anomalies.csv` (40) and from failed actions in `actions.csv` (`status = FAILED`, with a `failure_type`). Each issue links back to its mission, action, waypoint and asset.
+- Sort order: severity first, then asset `criticality`, then whether `operator_review_required` is set.
+- Lifecycle:
+  ```
+  OPEN → ACKNOWLEDGED → IN_PROGRESS → RESOLVED
+                    ↘                ↘ FALSE_ALARM
+  (RESOLVED or FALSE_ALARM can be REOPENED)
+  ```
+- Each change needs a short note, and an assignee is optional. FALSE_ALARM requires a reason, and those reasons feed the "confirmed vs false alarm" record promised in the README.
+- **Audit trail is append-only.** Every change adds an `issue_events` row (`from_status → to_status`, who, when, note). Rows are never edited or deleted, so the full history of every issue can be shown.
+
+**2. Snapshots (freeze current SPOT performance)**
+- A **Save snapshot** button computes the KPIs below right now and stores them, read-only, with a label, a note, the author, a timestamp and the scope (all data, V1 only, V2 only, or a mission range).
+- KPIs in each snapshot:
+
+  | KPI | Source |
+  |---|---|
+  | Mission completion % | missions |
+  | Action success % (overall and per `action_type`) | actions |
+  | Failure rate per waypoint (e.g. WP05 navigation: 28%) | actions |
+  | Anomalies by severity and type | anomalies |
+  | Open / resolved / false-alarm issue counts | ops.db |
+  | Mean time to resolve (MTTR) | issue_events |
+  | Average battery drain per mission | missions |
+  | Reading quality mix (GOOD vs other) | readings |
+- The existing **Generate PDF** button should export a snapshot so both features share one code path.
+
+**3. History (is it improving?)**
+- A timeline of every snapshot, with a line chart per KPI across snapshots.
+- **Compare two snapshots**: a delta table where each KPI shows ▲ improved (green) or ▼ degraded (red). Direction depends on the KPI: a lower failure rate is better, a higher success rate is better.
+- An activity feed per issue and per asset, e.g. "PUMP-205: 3 issues raised, 2 resolved, 1 false alarm."
+- **How the history fills during the demo:** the lakehouse starts with **only the 18 BASELINE missions** (M001–M018). On first run, save one `auto-seeded` snapshot per baseline mission day, so the chart already has a V1 history. The 9 IMPROVED missions (M019–M027) then arrive **live** through the Java ingest API (see below). After each one arrives, an automatic snapshot is saved, so the chart climbs in front of the judges (action success 77.2% → 91.1%). Snapshots store KPIs for **all data and per `configuration_version`**, so "before vs after" compares V1 with V2 rather than a blend of both.
+
+**4. Live alarm (pop-up that must be answered)**
+When a live mission brings in an anomaly that is HIGH or CRITICAL, or has `operator_review_required = True`, every open dashboard tab shows a full-screen alarm that stays up until someone makes a decision. In the kit's IMPROVED data that happens 5 times across 9 missions (M020, M022, M024, M025, M027).
+- **How it gets there:** the frontend opens `EventSource(INGEST_URL + "/events")`. Each `mission_ingested` event already includes its `alerts[]` (the anomaly plus the reading that triggered it), so the pop-up appears with no extra request. The data views also refresh on every event, so new missions show up live.
+- **Sound:** a two-tone siren made with the Web Audio API (alternating 600 Hz and 900 Hz every 0.4 s, looping until a decision). No audio file is needed. Browsers block sound until the page has been clicked, so show an **"Arm alarms 🔊"** button on load and click it at the start of the demo. A **Mute** button stops the sound but keeps the pop-up.
+- **What it shows:** a red flashing border; severity and type in large text ("CRITICAL · ABNORMAL TEMPERATURE"); asset name and criticality; waypoint name and floor; the reading compared with normal ("41.4 °C"); the time and mission; a **floor-plan crop with the waypoint pulsing** (x/y from `locations.csv`); and a **picture of the situation** from `04_ASSETS/sample_inspection_images`, labelled as a reference image:
+
+  | anomaly_type | image |
+  |---|---|
+  | ABNORMAL_TEMPERATURE | `thermal_pump_bearing_01.jpg` |
+  | ABNORMAL_VIBRATION | `acoustic_valve_01.jpg` |
+  | GAUGE_OUT_OF_RANGE | `gauge_pressure_01.jpg` |
+  | VISUAL_DEFECT | `visual_pump_motor_01.jpg` |
+  | NAVIGATION_OBSTRUCTION, LOCALIZATION_ISSUE, SIGNAL_DEGRADATION | `pipe_gallery_01.jpg` |
+- **Can't be dismissed:** there's no ✕, and Esc or clicking outside does nothing. The only two ways out are:
+  - **✅ Not a problem (override)**: needs a short reason, and the issue becomes FALSE_ALARM.
+  - **🚨 Mark as danger**: the issue becomes IN_PROGRESS, marked `danger`, and goes to the top of the queue.
+
+  Both need a signed-in operator. If nobody is signed in, the PIN prompt appears inside the pop-up.
+- If several alerts are waiting, they queue and the pop-up shows "1 of 3". If a dashboard was closed when an alert arrived, it loads undecided alerts from `GET /ops/alerts?pending=true` on startup, so nothing gets missed.
+- Decisions go into the same append-only `issue_events` log. Response time (from alert to decision) becomes a snapshot KPI: **median time to respond to alarms**.
+
+**Data model (`ops.db`):**
+```
+issues(issue_id, source_type[ANOMALY|FAILED_ACTION], source_id, mission_id, location_id,
+       asset_id, severity, title, status, assignee, created_at, updated_at)
+issue_events(event_id, issue_id, from_status, to_status, note, actor, actor_role, at)   -- append-only
+snapshots(snapshot_id, label, note, scope, kpis_json, created_by, created_at, auto_seeded)
+```
+
+**API (everything under `/ops`, and writes require the sign-in token):**
+| Method | Path | Purpose |
+|---|---|---|
+| POST | `/ops/login` | name + role + PIN → token |
+| GET | `/ops/issues?status=&severity=&location=` | issue queue |
+| GET | `/ops/issues/{id}` | issue + linked records + full event history |
+| PATCH | `/ops/issues/{id}` | change status / assignee, with a note (writes an `issue_events` row) |
+| GET | `/ops/kpis?scope=` | live KPIs (same function the snapshots use) |
+| POST | `/ops/snapshots` | save a snapshot |
+| GET | `/ops/snapshots` | snapshot timeline |
+| GET | `/ops/snapshots/compare?a=&b=` | KPI deltas, each marked improved / degraded |
+| POST | `/ops/ingest-hook` | called by the Java API after each live mission: refresh cache, open issues, mark alarm ones `pending_decision`, save the auto snapshot |
+| GET | `/ops/alerts?pending=true` | alarms still waiting for a decision |
+| POST | `/ops/alerts/{anomaly_id}/decision` | `{decision: OVERRIDE \| DANGER, note}` → issue status + `issue_events` row |
+
+**AI hook (optional):** expose `/ops/snapshots/compare` and open issues to the assistant, so it can answer *"What changed since the last snapshot?"* or *"What's still open on WP05?"*
 
 ### AI Assistant (both tabs)
 - One RAG backend, two answer styles chosen by the active tab: **simple** (Overview) or **technical** (Data Scientist)
@@ -128,6 +221,29 @@ Priority key: **P0** = must ship · **P1** = high value, should ship · **P2** =
 - [ ] AI popup in `technical` mode — _owner:_
 - [ ] **Generate PDF**: timestamped snapshot of the current results (`jsPDF` + `jspdf-autotable` for tables; filename like `spot-report-2026-10-11T08-30.pdf`) — _owner:_
 
+### P1: Operator Console Module (see the Product Vision spec)
+- [ ] `backend/ops/`: SQLite schema (`issues`, `issue_events`, `snapshots`) + generate issues from anomalies and failed actions — _owner:_
+- [ ] Shared `compute_kpis(scope)` function, used by `/ops/kpis`, snapshots and the PDF export — _owner:_
+- [ ] `/ops/*` endpoints + PIN sign-in, with writes rejected unless signed in — _owner:_
+- [ ] Seed snapshot history from the BASELINE missions only (one per mission day); auto-snapshot after each live mission via `/ops/ingest-hook` — _owner:_
+- [ ] `/ops/alerts` + decision endpoint; time-to-respond KPI — _owner:_
+- [ ] Frontend: full-screen live alarm (EventSource on `/events`, Web Audio siren, Arm/Mute buttons, inspection image + pulsing floor-plan crop, override vs danger, "1 of N" queue) — _owner:_
+- [ ] Frontend `modules/ops/`: issue queue with filters, issue detail with status buttons, note box and audit timeline — _owner:_
+- [ ] Frontend: Save snapshot button, snapshot timeline chart, compare-two-snapshots table (▲/▼) — _owner:_
+- [ ] `OPS_ENABLED` flag; the other tabs still work with the module off — _owner:_
+
+### P0: Java Live Ingest API (`ingest-api/`) ✅ built
+Plain JDK 17 with no dependencies; see [ingest-api/README.md](ingest-api/README.md). It's the only way new data gets into the lakehouse.
+- [x] `seed --reset`: lakehouse = locations + assets + the 18 BASELINE missions
+- [x] `POST /ingest/missions`: validates a mission bundle (types, required fields, links to the mission, actions, locations and assets, no duplicates) and appends it. Nothing is written if anything fails.
+- [x] `GET /events` (Server-Sent Events): pushes `mission_ingested` with `alerts[]` to every dashboard
+- [x] `feed --delay 8`: replays the 9 IMPROVED missions through the API as if SPOT were sending them live
+- [x] Two storage targets: Databricks Delta (Statement Execution API) or local CSVs in `data/lakehouse/` (offline fallback, same format as the kit)
+- [x] Optional `INGEST_API_KEY` for writes, and `INGEST_WEBHOOK_URL` → `/ops/ingest-hook`
+- [ ] Python backend reads the **lakehouse** (`data/lakehouse/` or Databricks), not the kit's `02_DATA`, so live missions show up — _owner:_
+- [ ] Deploy next to the backend (Render / Railway: `javac` build, `java -cp out work.spotat.ingest.Main serve`) — _owner:_
+- [ ] Test against real Databricks once the workspace is up (only tested on the local CSV target so far) — _owner:_
+
 ### P1: Model Training, Testing & Efficiency Numbers
 Judges trust numbers. Shown in the Data Scientist tab.
 
@@ -170,7 +286,7 @@ Judges trust numbers. Shown in the Data Scientist tab.
 > DNS can take a while to propagate. **Do this tonight**, not at 9 AM.
 
 ### P2: Databricks Data Layer (relational + non-relational)
-- [ ] Load the CSVs into **Delta tables**. This is the relational layer. — _owner:_
+- [ ] Load the CSVs into **Delta tables** with `ingest-api` (`SINK=databricks`, `seed --reset`). This is the relational layer. Only BASELINE goes in at the start; IMPROVED arrives live. — _owner:_
 - [ ] Store `replay.ndjson` events and inspection images as **semi-structured / volume data**. This is the non-relational layer. — _owner:_
 - [ ] Run model training in a Databricks notebook and log metrics with MLflow — _owner:_
 - [ ] Backend reads from Databricks, with a **local CSV fallback** if the connection fails during the demo — _owner:_
@@ -193,7 +309,7 @@ Each phase lists **what** gets done, **how**, and **who** works in parallel. Don
 - [ ] Assign roles and fill in the team table above
 - [ ] Pick the stack (suggested: Python + FastAPI backend, React + Vite + React Three Fiber frontend) and update the README Tech Stack table
 - [ ] **Pick the 3D SPOT model** (licensed GLB or low-poly fallback)
-- [ ] **Agree on the API contract**: JSON shapes for an Inspection Record, a part summary, a waypoint summary, metrics, and `/ask`. Write it to `docs/api_contract.md`. The frontend builds against this, so it doesn't have to wait on the backend.
+- [ ] **Agree on the API contract**: JSON shapes for an Inspection Record, a part summary, a waypoint summary, metrics, `/ask`, and the `/ops/*` issue + snapshot shapes. Write it to `docs/api_contract.md`. The frontend builds against this, so it doesn't have to wait on the backend.
 - [ ] Set up repo folders (`backend/`, `frontend/`, `ml/`, `docs/`), `.gitignore` for `.env`, and a `.env.example`
 - [ ] Register `spotat.work` now, so DNS has hours to propagate
 
@@ -238,7 +354,9 @@ Each phase lists **what** gets done, **how**, and **who** works in parallel. Don
 🔒 **Gate (~midnight):** full core demo works on `spotat.work`: click a SPOT part → see its data → switch floors → ask the AI → switch to the Data Scientist tab.
 
 ### Phase 3: Secondary Tracks (midnight → 5 AM)
-- [ ] Frontend: **Generate PDF** in the Data Scientist tab
+- [ ] Backend: **Operator Console** `/ops/*` + `ops.db` + seeded snapshots. It only needs Phase 1's Inspection Records, so it can start as soon as that gate passes.
+- [ ] Frontend: Operator tab: issue queue → resolve with a note → save a snapshot → compare with the earlier one
+- [ ] Frontend: **Generate PDF** in the Data Scientist tab (exports a snapshot)
 - [ ] Frontend: model metrics panel + confusion matrix in the Data Scientist tab
 - [ ] AI: pass the selected part / floor / waypoint as context; add the "I don't have data on that" guardrail
 - [ ] Infra: Databricks Delta tables + MLflow, backend reading from it. **If it isn't working by 3 AM, cut it.**
@@ -248,7 +366,7 @@ Each phase lists **what** gets done, **how**, and **who** works in parallel. Don
 🔒 **Gate (5 AM): feature freeze.** Only bug fixes from here.
 
 ### Phase 4: Submission Prep (5 AM → 10 AM)
-- [ ] Write the demo script: 3D SPOT → zoom into the thermal camera → floor toggle → ask the AI → Data Scientist tab → generate PDF
+- [ ] Write the demo script: 3D SPOT → zoom into the thermal camera → floor toggle → ask the AI → Data Scientist tab → generate PDF → sign in to the Operator Console → click **Arm alarms** → run `feed --delay 8` → watch IMPROVED missions arrive and the KPI chart climb → the alarm fires on M020 (CRITICAL temperature on HX-204): mark it as danger → the next one: override as not a problem → compare the "before" snapshot with the latest one to show the improvement. **Before every rehearsal and the recording, run `seed --reset`.**
 - [ ] Record the demo video (≤ 3 min) **before** any final polish
 - [ ] Screenshots: 3D landing page, part zoom, inclined map, AI answer (simple + technical), Data Scientist tab, PDF
 - [ ] Devpost writeup: problem, solution, model numbers, architecture diagram, tech stack, challenges

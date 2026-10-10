@@ -51,6 +51,18 @@ A dashboard that translates every SPOT mission into plain operator language, **l
 - Every flag links to the evidence SPOT captured (image, thermal frame, raw value)
 - Operators can mark flags as *confirmed* or *false alarm*, which builds a track record and tunes future alerts
 
+### 🔒 Operator Console (separate module)
+- Signed-in employees work through a queue of raised issues (anomalies and failed actions), moving each one through *Open → Acknowledged → In progress → Resolved / False alarm* with a note
+- Every change is kept in an append-only audit trail: who, when, what changed, and why
+- **Snapshots** freeze current SPOT performance (completion rate, success rate, failures per waypoint, open issues, time to resolve) at any moment
+- **History** charts every snapshot over time and compares any two, marking each metric as improved ▲ or degraded ▼
+- Built as its own module with its own storage, so the read-only dashboard works with or without it
+
+### 🚨 Live Data + Alarms
+- A small Java API ([ingest-api/](ingest-api/)) is the only way new missions enter the lakehouse. It validates each one and pushes it to every open dashboard instantly.
+- The demo starts with only BASELINE (V1) missions. The IMPROVED (V2) missions then stream in live, so you can watch performance change.
+- A serious anomaly sets off a siren and a full-screen alarm showing the asset, its location and a picture. It stays up until an operator marks it **not a problem** or **danger**.
+
 ### 🧑‍🏭 Designed for Operators, Not Engineers
 - No robotics jargon: "Boiler Room, Gauge 4" instead of `waypoint_0x3fa2`
 - Color and severity carry the meaning, and text explains it
@@ -139,6 +151,8 @@ _Screenshots, a demo video, and a walkthrough of a sample mission go here._
 - [ ] Real-time mission streaming (live or simulated)
 - [ ] Post-mission summary report and export
 - [ ] Operator feedback on flags (confirmed / false alarm)
+- [ ] Operator Console: issue workflow with an audit trail
+- [ ] Performance snapshots + historical comparison
 
 ## Why This Wins for Operators
 

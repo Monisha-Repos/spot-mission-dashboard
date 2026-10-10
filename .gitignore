@@ -218,3 +218,7 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Ingest API build output and local lakehouse
+ingest-api/out/
+data/lakehouse/
