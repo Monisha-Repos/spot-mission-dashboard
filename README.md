@@ -4,6 +4,8 @@
 
 Built for the **NextEra Energy: SPOT Management Dashboard** hackathon track.
 
+The working **Spotlight React dashboard** is in [`spot-3d-demo/`](spot-3d-demo/README.md), now replacing the model-demo homepage while preserving its 3D robot. Run `cd spot-3d-demo`, `npm install`, then `npm run dev`. It includes mission evidence, floor maps, replay, a synthetic live demo, handover exports and the robot explorer. The sections below describe the broader project vision; see the frontend README for the implemented scope and data limitations.
+
 ---
 
 ## The Problem

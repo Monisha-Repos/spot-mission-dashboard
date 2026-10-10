@@ -1,98 +1,79 @@
-# Spot Model Lab
+# Spotlight — mission intelligence
 
-A standalone React + Three.js prototype of a lightweight, articulated Spot robot. This demo runs entirely in the browser; it makes no backend calls and issues no robot commands.
+The React homepage is now the operator dashboard. The original articulated SPOT model remains in a compact companion panel and the **Robot explorer** view.
 
-## Run
+## Run locally
 
-Requires Node.js 20.19+ or 22.12+.
+From the repository root:
 
-```sh
+```powershell
 cd spot-3d-demo
 npm install
 npm run dev
 ```
 
-Open the URL printed by Vite (normally http://127.0.0.1:5173).
+Open the local URL printed by Vite. No account, domain, API key or hosting is required. The app loads the included fictional challenge data. For the complete test suite, use Node 22.22.2 or a supported Node 24.15+ release (jsdom's runtime requirement).
 
-```sh
-npm test       # Geometry budget, grounded feet, and pose checks
-npm run build # Production output in dist/
+```powershell
+npm test
+npm run build
 npm run preview
 ```
 
-## Try it
+`dist/` contains the production website. This replaces the former standalone model demo; the folder name is retained for existing project workflows.
 
-- Drag to orbit and scroll/pinch to zoom. Camera buttons also work by keyboard.
-- Switch between stand, walk, and sit. Walking is a cosmetic in-place gait, with pause and speed controls.
-- Change body height, enable auto-rotate, hide the grid, or inspect the wireframe.
-- Choose Eco mode for a 24 fps cap and 1x maximum pixel ratio.
-- Export a GLB of the current pose for Blender or another 3D viewer. Named joints and materials are preserved. The exported file **does not include walking animation clips**; that animation is procedural in `spotModel.js`.
+## What to try
 
-A ready-to-use standing pose is saved at `assets/spot-prototype.glb` (**30,540 bytes**). The demo generates its model in code; it does not download this file.
+1. Start in mission **M020**. Mission completion and inspection failures are shown separately.
+2. Click the red **WP07** map marker. The location panel explains the finding; click **Evidence** for source IDs, readings, timestamps, severity and a suggested next step.
+3. Switch between **Floor 01** and **Floor 02**. The map moves between levels and resets the location filter. Reduced-motion preferences disable animation.
+4. Open **Mission replay**, then step or play through the actual event order. Outcomes are hidden until their event arrives.
+5. Press **Ctrl+K** (or **Cmd+K**) to jump to a view, mission, waypoint, asset or action.
+6. Open **Live monitor → Run synthetic demo** to watch eight clearly labeled example events arrive. No robot is connected.
+7. Open **Robot explorer** for the original camera, pose, walking, body height, wireframe, quality and GLB export controls.
+8. Add a review or shift note and export a Markdown handover. Notes persist only in the current browser.
 
-## Add it to your React dashboard
+The battery icon fills to the exact supplied percentage: **61–100% green**, **31–60% yellow**, **0–30% red**. Missing telemetry displays an unavailable value, never an invented charge.
 
-Install `three` and copy these three files together:
+## Optional local event gateway
 
-```text
-src/SpotViewer.jsx
-src/SpotViewer.css
-src/spotModel.js
+Python 3.10+; no Python dependencies. After building:
+
+```powershell
+python server.py --replay public/data/live-demo.ndjson --interval 0.8
 ```
 
-```jsx
-import SpotViewer from './components/SpotViewer';
+Open `http://127.0.0.1:8765`, choose **Live monitor**, then **Connect gateway**. The server streams the included synthetic sample. Restart the server to replay it again.
 
-export function RobotPanel({ robotState }) {
-  return (
-    <div style={{ position: 'relative', height: 420, background: '#edf0e7' }}>
-      <SpotViewer
-        stance={robotState?.isMoving ? 'walk' : 'stand'}
-        playing={true}
-        quality="eco"
-        showGrid={true}
-      />
-    </div>
-  );
-}
+For an empty gateway accepting incoming Spotlight event JSON/NDJSON:
+
+```powershell
+python server.py
 ```
 
-The `robotState` example is a placeholder for your team's state shape. There is no assumed telemetry contract. For Next.js, put this in a client component; use a dynamic import with SSR disabled if needed.
+In another terminal, use `python scripts/send_live_demo.py` to POST invented example events. The protocol uses `/api/health` and `/api/events`; it supports the five kit lifecycle events plus `READING_CAPTURED` and `ANOMALY_DETECTED`. The example fields are visible in `public/data/live-demo.ndjson`. Importing an event log also works without a gateway.
 
-| Prop | Values / default |
-| --- | --- |
-| `stance` | `stand` (default), `walk`, `sit` |
-| `playing` | `true`; `false` freezes the current walking phase |
-| `speed` | `1`; demo supports `0.5`, `1`, `1.5` |
-| `bodyHeight` | Meter offset; supported range `-0.09` through `0.02`, default `0` |
-| `view` | `perspective`, `front`, `side`, `top` |
-| `resetKey` | Increment to restore the selected camera |
-| `quality` | `balanced` (30 fps, DPR ≤ 1.5) or `eco` (24 fps, DPR ≤ 1) |
-| `showGrid` | `true` |
-| `wireframe`, `autoRotate` | `false` |
-| `onStats` | Receives `{ triangles, calls, geometries }`: model triangles plus scene draw calls and geometry allocations |
+This loopback development gateway is separate from the repository's Java `ingest-api` and does not accept native Orbit webhooks. A deployed live service needs an authenticated adapter; static hosting supports archive/replay and the built-in synthetic demo. Browser live history is limited to 2,000 events, flags truncation, and stops when leaving Live monitor. Export before navigating away.
 
-An optional React ref exposes `await ref.current.exportGLB()`. To use the model in an existing Three.js scene without the viewer, call `createSpotModel()`, add its `root` to your scene, and call `pose({ stance, time, speed, bodyHeight, moving })`. `time` is seconds; `moving: true` enables the walk cycle. Call `dispose()` when finished. The returned `body` and `legs` expose the joints for future customization.
+## Evidence and scope
 
-## Performance decisions
+- 27 missions, 270 actions, 220 readings, 40 anomalies and 15 waypoints from the earlier normalized challenge dataset, now included in `public/data/mission-data.json`.
+- Source flags are preserved. No invented numeric alarm thresholds, confidence probabilities or linked inspection photos.
+- The map uses supplied XY coordinates and the action waypoint. Registry conflicts are disclosed. Its architectural outline is illustrative; route lines indicate inspection order, not robot path geometry.
+- Recorded timestamps have no supplied timezone. Replay-linked CSV observations are explicitly reconstructed; M023 has partial replay, and M024–M027 have none.
+- Reviewing a finding never clears the underlying anomaly or declares equipment healthy.
+- The 3D model is a cosmetic, original stylization, not official CAD, telemetry or robot control. It retains 4,032 model triangles, on-demand drawing, capped rendering and offscreen suspension. GLB export contains the selected pose, not procedural walk animation.
 
-- **4,032 model triangles**, shared geometry and materials, no external model downloads or model textures.
-- A single 64 × 64 generated contact-shadow texture. No real-time shadow maps, HDR environment maps, post-processing, physics engine, or animation library.
-- On-demand drawing when stationary; animation has an explicit frame cap. Actual frame rate depends on the device.
-- Stops scheduling frames when the tab is hidden or the viewer is offscreen. Auto-rotation respects reduced-motion preferences.
-- Pixel ratio is capped; renderer requests a low-power GPU preference (the browser decides how to honor it).
-- Geometry, materials, observers, controls, and WebGL renderer are disposed on unmount.
-- Three.js/viewer is loaded separately from the initial React UI; GLB exporter loads only when requested.
-- Demo fonts are optional Google Fonts, with local fallback fonts. The portable viewer does not need them.
+## Implementation and verification
 
-Production build sizes are printed by `npm run build`. The 3D engine is the largest download, approximately 141 kB gzip in the initial verified build; React/demo code is approximately 73 kB gzip. Those sizes exclude optional webfonts, and hosting must enable compression to deliver the gzip sizes.
+`src/App.jsx` coordinates navigation and state. `src/components/` contains the views, map, battery indicator, evidence drawer and robot panels. `src/lib/` contains the archive/replay engine, live-event reducer and display helpers. The original `SpotViewer.jsx`, `SpotViewer.css`, `spotModel.js` and model tests are unchanged.
 
-## Scope and reference
+`npm test` covers evidence joins, replay boundaries, live conflict handling, battery bands, map findings, model geometry and React interactions. The DOM tests substitute the WebGL viewer and polyfill dialogs; they do not verify browser layout, GPU rendering or native focus trapping. The production build retains a separate lazy-loaded Three.js chunk.
 
-This is original stylized geometry, visually inspired by [Boston Dynamics Spot](https://bostondynamics.com/products/spot/). It is not official CAD, a physically accurate simulation, or a calibrated robot digital twin. The compact yellow shell, black sensor panels, and four jointed legs are built from code and are easy to edit. Dimensions and movements are approximate. +X is forward, +Y is up, and +Z is left; model units are meters.
+Optional gateway checks:
 
-Model appearance and materials: `src/spotModel.js`. Rendering and camera: `src/SpotViewer.jsx`. Demo UI: `src/main.jsx` and `src/styles.css`.
+```powershell
+python -m unittest discover -s tests -p test_server.py -v
+```
 
-## Verification
-
-Production build and three automated model tests pass. Browser checks covered desktop and a 390px mobile viewport, pose changes, pause, camera presets, wireframe, Eco mode, and GLB download. The exported GLB header, size, and scene structure were checked. No browser console errors were observed. Device-specific CPU/GPU usage has not been benchmarked.
+If a sandbox restricts its temporary directory, create a writable directory and set `SPOTLIGHT_TEST_TMP` to that directory before running the Python checks.
