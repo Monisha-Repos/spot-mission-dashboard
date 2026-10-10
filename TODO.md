@@ -1,20 +1,34 @@
-# TODO: Knight Hacks (SPOT Mission Dashboard)
+# TODO: Knight Hacks
 
-## ⏰ Hard Deadlines (Sat 10/11)
+## ⏰ Plan 
+### Saturday (10/11)
+finish all coding!
+**High Priority**
+[ ]
+[ ]
+**Medium Priority**
+[ ]
+[ ]
+**Low Priority**
+[ ]
+[ ]
+[ ]
 
-- [ ] **10:00 AM**: **Devpost submitted** (description, demo video, screenshots, tracks, all teammates added). Owner: _TBD_
-- [ ] **11:00 AM**: **Final commits pushed + repo public**, no pushes after. Owner: _TBD_
+### Sunday (10/11)
+deploy to custom domain
+create demo video
+judging prep
+final touches
+devpost submission by **10 AM**
+final commit, make repository public by **11 AM**
 
-### Key Pointers
-- **Submit Devpost early (aim for ~9:00 AM).** You can edit it until the deadline, but a late submission can't be fixed.
-- Devpost will link to the repo before 11:00, while the repo is still private. Make it public **before** judging starts, and check the link works from a logged-out browser.
-- New features freeze at ~5 AM. After that, only bug fixes, polish, and demo prep.
-- Record the demo video **before** the final polish pass, so a broken late change can't cost you the video.
-- Never push secrets: Databricks tokens, LLM API keys, and `.env` files stay out of git. Check `git log -p` for keys before the repo goes public.
-- Every secondary track below is optional. If one is at risk, cut it and keep the core demo working.
-- Remove committed `.DS_Store` files before the repo goes public.
+*Never push secrets: Databricks tokens, LLM API keys, and `.env` files stay out of git. Check `git log -p` for keys before the repo goes public.*
 
----
+*Remove committed `.DS_Store` files before the repo goes public.*
+
+## Coding TODO
+
+
 
 ## 💡 Product Vision
 
@@ -22,18 +36,18 @@ Two tabs, one AI assistant shared by both.
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│  [ Overview ]  [ Data Scientist ]                  spotat.work │
+│  [ Overview ]  [ Data Scientist ]                spotat.work │
 ├──────────────────────────────────────────────────────────────┤
 │                                                              │
-│              🐕  3D SPOT model (rotate / zoom)               │
+│                  3D SPOT model (rotate / zoom)               │
 │        click a part → camera zooms in → that part's data     │
 │                                                              │
 ├──────────────────────────────────────────────────────────────┤
-│        ▱▱▱ Floor 2 ▱▱▱     inclined (isometric) map          │
-│      ▱▱▱ Floor 1 ▱▱▱       [ Floor 1 | Floor 2 ] toggle      │
+│        ______ Floor 2 ______    inclined (isometric) map     │
+│      ______ Floor 1 ______ [ Floor 1 | Floor 2 ] toggle      │
 │                             animated swap between floors     │
 │                                                    ┌──────┐  │
-│                                                    │ 💬 AI│  │
+│                                                    │  AI  │  │
 └────────────────────────────────────────────────────┴──────┴──┘
 ```
 
@@ -75,28 +89,9 @@ Two tabs, one AI assistant shared by both.
 
 ---
 
-## 👥 Team, Roles & Responsibilities
 
-> Jobs will be assigned soon. Fill in the owner of each task once roles are set.
+## 📝 Judging Prep
 
-| Contributor | GitHub | Role | Owns |
-|---|---|---|---|
-| Monisha Natarajan | [@Monisha-Repos](https://github.com/Monisha-Repos) | _TBD_ | _TBD_ |
-| Alexander Giannak | AlexanderGiannak | _TBD_ | _TBD_ |
-| _TBD_ | | _TBD_ | _TBD_ |
-| _TBD_ | | _TBD_ | _TBD_ |
-
-**Suggested role split** (one person can hold more than one):
-
-| Role | Responsibilities |
-|---|---|
-| **3D / Frontend Lead** | 3D SPOT model, part zoom, inclined two-floor map + floor toggle animation |
-| **Frontend / UX Lead** | App shell, tabs, Data Scientist tables, AI popup UI, PDF export, theme |
-| **Data / ML Lead** | Data loading and cleaning, train/test split, anomaly model, efficiency metrics |
-| **Backend / AI Lead** | API, RAG pipeline (simple + technical modes), Databricks, deployment, domain/DNS |
-| **Submission Lead** | Devpost writeup, demo video, README, keeping time against the deadlines |
-
----
 
 ## 🎯 Prioritized Task List
 
