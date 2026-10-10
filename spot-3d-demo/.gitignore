@@ -1,0 +1,7 @@
+node_modules/
+dist/
+*.local
+.test-tmp/
+# The repository's Python template ignores lib/; these are frontend sources.
+!src/lib/
+!src/lib/**
