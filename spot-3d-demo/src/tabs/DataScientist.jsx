@@ -240,6 +240,7 @@ export default function DataScientist() {
   const metrics = useApi('/metrics');
   const waypoints = useApi('/waypoints');
   const summary = useApi('/summary');
+  const insights = useApi('/insights');
   const spec = TABLES[table];
   const tableState = table === 'missions' ? missions : { ...records, data: records.data && (spec.select ? spec.select(records.data.records) : records.data.records) };
 
@@ -248,8 +249,9 @@ export default function DataScientist() {
     setPdfError('');
     try {
       await downloadReport({
-        title: 'Spot mission report', subtitle: 'Data Scientist view',
+        title: 'Spot mission report', subtitle: 'Every mission, waypoint and finding, with what needs attention and how the failure-risk model performs.',
         kpis: summary.data.kpis, compare: compare.data, metrics: metrics.data, waypoints: waypoints.data, ops: summary.data.ops,
+        missions: missions.data, insights: insights.data, attention: summary.data.needs_attention,
       });
     } catch (e) {
       setPdfError(e.message);

@@ -199,7 +199,11 @@ function Snapshots() {
   }
   async function exportPdf(id) {
     const s = await api(`/ops/snapshots/${id}`);
-    await downloadReport({ title: `Snapshot: ${s.label}`, subtitle: `by ${s.created_by}, as of ${s.as_of || s.created_at}`, kpis: s.kpis, ops: s.kpis.all?.ops });
+    await downloadReport({
+      kind: 'snapshot', title: `Snapshot: ${s.label}`,
+      subtitle: `Saved by ${s.created_by} on ${formatTime(s.created_at)}. Covers ${s.missions} missions, data up to ${formatTime(s.as_of || s.created_at)}.`,
+      note: s.note, asOf: s.as_of || s.created_at, kpis: s.kpis, ops: s.kpis.all?.ops,
+    });
   }
 
   const unit = CHART_KPIS.find(([k]) => k === kpi)[1];
