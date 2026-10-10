@@ -162,8 +162,8 @@ export default function Overview({ theme, context, setContext, onReplay }) {
               {PART_ORDER.map(id => {
                 const p = parts.data?.find(x => x.id === id);
                 return (
-                  <button key={id} type="button" className={`chip tone-${partStatus[id] || 'muted'}`} aria-pressed={part === id} onClick={() => setPart(part === id ? null : id)}>
-                    <span className="dot" aria-hidden="true" />{p ? p.name.split(' (')[0] : titleCase(id)}
+                  <button key={id} type="button" className="chip" aria-pressed={part === id} onClick={() => setPart(part === id ? null : id)}>
+                    {p ? p.name.split(' (')[0] : titleCase(id)}
                   </button>
                 );
               })}
