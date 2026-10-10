@@ -104,6 +104,12 @@ python -m venv .venv
 Copy-Item backend\.env.example backend\.env
 code backend\.env
 ```
+
+run...
+.venv\Scripts\pip install -r backend\requirements.txt
+Copy-Item backend\.env.example backend\.env
+code backend\.env
+
 In `backend\.env` set at least:
 ```
 OPS_PIN=<a PIN for operator sign-in>

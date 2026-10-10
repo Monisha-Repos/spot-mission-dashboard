@@ -10,6 +10,8 @@
     "test": "node --test src/spotModel.test.js tests/*.test.mjs"
   },
   "dependencies": {
+    "jspdf": "^3.0.4",
+    "jspdf-autotable": "^5.0.8",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "three": "^0.180.0"
