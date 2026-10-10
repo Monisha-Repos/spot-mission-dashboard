@@ -8,7 +8,7 @@ import AskPanel from './components/AskPanel.jsx';
 import AlarmCenter from './components/AlarmCenter.jsx';
 import { createSiren } from './lib/siren.js';
 
-const TABS = [['overview', 'Overview'], ['replay', 'Replay'], ['scientist', 'Data Scientist'], ['operator', 'Operator']];
+const TABS = [['overview', 'Overview'], ['replay', 'Replay'], ['analysis', 'Data Analysis'], ['operator', 'Operator']];
 const PLAIN_TABS = ['overview', 'replay'];
 
 function stored(key, fallback, allowed) {
@@ -24,8 +24,8 @@ function store(key, value) {
 export default function App() {
   const [tab, setTab] = useState(() => {
     const ids = TABS.map(t => t[0]);
-    const hash = window.location.hash.slice(1);
-    return ids.includes(hash) ? hash : stored('spot.tab', 'overview', ids);
+    const route = window.location.pathname.replace(/^\/+|\/+$/g, '') || window.location.hash.slice(1);
+    return ids.includes(route) ? route : 'overview';
   });
   const [theme, setTheme] = useState(() => stored('spot.theme', 'dark', ['dark', 'light']));
   const [version, setVersion] = useState(0);
@@ -39,8 +39,8 @@ export default function App() {
   const [stream, setStream] = useState('connecting');
 
   useEffect(() => {
-    store('spot.tab', tab);
-    if (window.location.hash.slice(1) !== tab) window.history.replaceState(null, '', `#${tab}`);
+    const { pathname, search } = window.location;
+    if (pathname !== `/${tab}` || window.location.hash) window.history.replaceState(null, '', `/${tab}${search}`);
   }, [tab]);
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -63,7 +63,7 @@ export default function App() {
       <a className="skip" href="#main">Skip to content</a>
       <div className="app" inert={alarm}>
         <header className="topbar">
-          <a className="brand" href="#overview" aria-label="spotat.work home" onClick={e => { e.preventDefault(); setTab('overview'); }}>
+          <a className="brand" href="/overview" aria-label="spotat.work home" onClick={e => { e.preventDefault(); setTab('overview'); }}>
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 2h10l5 10-5 10H7L2 12z" /></svg>
             <span>spotat<b>.</b>work</span>
           </a>
@@ -98,7 +98,7 @@ export default function App() {
         <main id="main" className={`main main-${tab}`}>
           {tab === 'overview' && <Overview theme={theme} context={context} setContext={setContext} onReplay={openReplay} />}
           {tab === 'replay' && <Replay missionId={replayMission} onMission={setReplayMission} />}
-          {tab === 'scientist' && <DataScientist />}
+          {tab === 'analysis' && <DataScientist />}
           {tab === 'operator' && <OpsConsole />}
         </main>
 

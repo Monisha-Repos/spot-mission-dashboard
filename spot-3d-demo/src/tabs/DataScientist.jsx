@@ -268,7 +268,7 @@ export default function DataScientist() {
       <header className="page-head">
         <div>
           <p className="eyebrow">Technical view</p>
-          <h1>Data scientist</h1>
+          <h1>Data analysis</h1>
         </div>
         <div className="page-actions">
           <button type="button" className="btn btn-accent" onClick={pdf} disabled={busy || !summary.data}>{busy ? 'Building PDF…' : 'Generate PDF'}</button>

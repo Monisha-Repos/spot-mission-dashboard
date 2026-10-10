@@ -1,4 +1,4 @@
-// PDF report shared by "Generate PDF" (Data Scientist tab) and snapshot export (Operator Console).
+// PDF report shared by "Generate PDF" (Data Analysis tab) and snapshot export (Operator Console).
 // Layout follows DESIGN-lamborghini.md: a true-black cover, white print pages with black chrome, Helvetica
 // (the spec's fallback for LamboType) in uppercase at weight 400, sharp corners, hexagon marks, and gold as
 // the one accent. Status colours stay green / amber / red, as in the app. Charts are drawn as vectors.

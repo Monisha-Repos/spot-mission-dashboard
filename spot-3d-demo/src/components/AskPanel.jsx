@@ -16,7 +16,7 @@ function contextLabel(ctx) {
   return parts.join(' · ');
 }
 
-/** Bottom-right assistant shared by every tab. mode: simple (Overview) or technical (Data Scientist, Operator). */
+/** Bottom-right assistant shared by every tab. mode: simple (Overview) or technical (Data Analysis, Operator). */
 export default function AskPanel({ mode, context }) {
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState([]);
