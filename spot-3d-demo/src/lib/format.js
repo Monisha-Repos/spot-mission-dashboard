@@ -16,6 +16,11 @@ export function num(value, digits = 2) {
 
 const UNITS = { C: '°C', pct: '%', psi: ' psi', dB: ' dB', db: ' dB', score: '/100' };
 export const unit = u => UNITS[u] ?? (u ? ` ${u}` : '');
+const MEASUREMENTS = {
+  TEMPERATURE_C: 'Temperature', PRESSURE_PSI: 'Pressure', SOUND_DB: 'Sound level',
+  VISUAL_SCORE: 'Visual condition score', LOCALIZATION_CONFIDENCE_PCT: 'Localization confidence',
+};
+export const measurementLabel = code => MEASUREMENTS[code] || humanize(code);
 export const reading = r => (r ? `${num(r.value)}${unit(r.unit)}` : '—');
 
 export function formatTime(iso) {

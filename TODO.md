@@ -173,7 +173,7 @@ snapshots(snapshot_id, label, note, scope, kpis_json, created_by, created_at, au
 - Cites the records it used (mission / anomaly / waypoint IDs)
 
 ### UI / UX
-- **Light mode** only
+- **Dark and light mode** with a toggle (Lamborghini-inspired tokens: black, white, gold `#FFC000`)
 - Accent colors from SPOT's palette (yellow + black/charcoal). Exact hex values are TBD. Define them as CSS variables so they can be swapped in one place:
   ```css
   :root { --spot-yellow: #FFC20E; /* TBD */ --spot-black: #1A1A1A; --bg: #FAFAF7; }
@@ -197,29 +197,29 @@ Priority key: **P0** = must ship · **P1** = high value, should ship · **P2** =
 - [x] BASELINE vs IMPROVED (V1 vs V2) comparison with significance tests — `GET /compare`
 
 ### P0: Overview Tab (landing page)
-- [ ] 3D SPOT model loaded in React Three Fiber (`@react-three/fiber` + `@react-three/drei`) — _owner:_
-- [ ] Clickable hotspots on each part (table above) → camera zooms in (drei `CameraControls`) → info panel with that part's data in plain language — _owner:_
-- [ ] Inclined map: both floor plans as tilted planes (CSS 3D `rotateX/rotateZ` or R3F planes), waypoints from `locations.csv` x/y — _owner:_
-- [ ] Floor 1 ↔ Floor 2 toggle with an animated swap (Framer Motion or `react-spring`) — _owner:_
-- [ ] Waypoint markers colored by status; click one for its readings — _owner:_
+- [x] 3D SPOT model (plain Three.js, original stylized model + CAM+IR/mic/antenna payloads) — `spot-3d-demo/src/SpotViewer.jsx`
+- [x] Clickable hotspots on each part (table above) → camera zooms in (drei `CameraControls`) → info panel with that part's data in plain language
+- [x] Inclined map: both floor plans as tilted planes (CSS 3D `rotateX/rotateZ` or R3F planes), waypoints from `locations.csv` x/y
+- [x] Floor 1 ↔ Floor 2 toggle with an animated swap (Framer Motion or `react-spring`)
+- [x] Waypoint markers colored by status; click one for its readings
 
 > **3D model source:** look for a SPOT glTF/GLB with a license that allows reuse (Sketchfab CC-BY, or meshes from Boston Dynamics' open-source `spot_description` package). Credit it in the README. **Fallback:** a stylized low-poly SPOT made from boxes and cylinders still works, because the hotspots are what matter. Decide in Phase 0 so nobody blocks on it.
 
 ### P0: AI Assistant (popup, both tabs)
 - [x] RAG pipeline over the data dictionary, challenge docs, SPOT user guide and per-record / mission / waypoint / asset summaries (TF-IDF retrieval, ~450 docs) — `backend/app/assistant.py`
 - [x] `/ask` endpoint: retrieve top-k → LLM (Claude or Hugging Face, switchable) → answer citing IDs. Takes `mode` and `context`
-- [ ] Bottom-right popup chat component, shared by both tabs — _owner:_
+- [x] Bottom-right popup chat component, shared by both tabs
 - [x] Guardrail: off-topic questions get "I don't have data on that" without an LLM call
 
 **Keep it simple:** in-memory vector store (FAISS / Chroma) + one LLM call. Don't build an agent framework at a hackathon.
 
 ### P1: Data Scientist Tab
-- [ ] Tab switch in the header (Overview ↔ Data Scientist); remember the last tab — _owner:_
-- [ ] Sortable/filterable tables for missions, actions, readings, anomalies — _owner:_
-- [ ] Outcome numbers: success rates, failure types per waypoint, V1 vs V2 — _owner:_
-- [ ] Model metrics panel (reads `ml/metrics.json`) — _owner:_
-- [ ] AI popup in `technical` mode — _owner:_
-- [ ] **Generate PDF**: timestamped snapshot of the current results (`jsPDF` + `jspdf-autotable` for tables; filename like `spot-report-2026-10-11T08-30.pdf`) — _owner:_
+- [x] Tab switch in the header (Overview ↔ Data Scientist); remember the last tab
+- [x] Sortable/filterable tables for missions, actions, readings, anomalies
+- [x] Outcome numbers: success rates, failure types per waypoint, V1 vs V2
+- [x] Model metrics panel (reads `ml/metrics.json`)
+- [x] AI popup in `technical` mode
+- [x] **Generate PDF**: timestamped snapshot of the current results (`jsPDF` + `jspdf-autotable` for tables; filename like `spot-report-2026-10-11T08-30.pdf`)
 
 ### P1: Operator Console Module (see the Product Vision spec)
 - [x] `backend/app/ops/`: SQLite schema (`issues`, append-only `issue_events`, `snapshots`) + issues from anomalies and failed actions
@@ -227,9 +227,9 @@ Priority key: **P0** = must ship · **P1** = high value, should ship · **P2** =
 - [x] `/ops/*` endpoints + PIN sign-in, with writes rejected unless signed in
 - [x] Seed snapshot history from the BASELINE missions only (one per mission day); auto-snapshot after each live mission via `/ops/ingest-hook`
 - [x] `/ops/alerts` + decision endpoint; time-to-respond KPI
-- [ ] Frontend: full-screen live alarm (EventSource on `/events`, Web Audio siren, Arm/Mute buttons, inspection image + pulsing floor-plan crop, override vs danger, "1 of N" queue) — _owner:_
-- [ ] Frontend `modules/ops/`: issue queue with filters, issue detail with status buttons, note box and audit timeline — _owner:_
-- [ ] Frontend: Save snapshot button, snapshot timeline chart, compare-two-snapshots table (▲/▼) — _owner:_
+- [x] Frontend: full-screen live alarm (EventSource on `/events`, Web Audio siren, Arm/Mute buttons, inspection image + pulsing floor-plan crop, override vs danger, "1 of N" queue)
+- [x] Frontend `modules/ops/`: issue queue with filters, issue detail with status buttons, note box and audit timeline
+- [x] Frontend: Save snapshot button, snapshot timeline chart, compare-two-snapshots table (▲/▼)
 - [x] `OPS_ENABLED` flag; the other endpoints still work with the module off
 
 ### P0: Java Live Ingest API (`ingest-api/`) ✅ built
@@ -297,7 +297,7 @@ Judges trust numbers. Shown in the Data Scientist tab.
 ### P3: Stretch Polish
 - [ ] Animate SPOT walking its route across the inclined map during a mission replay — _owner:_
 - [ ] Clicking a waypoint on the map highlights the SPOT part that took that reading — _owner:_
-- [ ] Inspection images (`04_ASSETS/sample_inspection_images`) shown in the part info panel — _owner:_
+- [x] Inspection images (`04_ASSETS/sample_inspection_images`) shown in the part info panel
 
 ---
 
@@ -355,9 +355,9 @@ Each phase lists **what** gets done, **how**, and **who** works in parallel. Don
 
 ### Phase 3: Secondary Tracks (midnight → 5 AM)
 - [x] Backend: **Operator Console** `/ops/*` + `ops.db` + seeded snapshots
-- [ ] Frontend: Operator tab: issue queue → resolve with a note → save a snapshot → compare with the earlier one
-- [ ] Frontend: **Generate PDF** in the Data Scientist tab (exports a snapshot)
-- [ ] Frontend: model metrics panel + confusion matrix in the Data Scientist tab
+- [x] Frontend: Operator tab: issue queue → resolve with a note → save a snapshot → compare with the earlier one
+- [x] Frontend: **Generate PDF** in the Data Scientist tab (exports a snapshot)
+- [x] Frontend: model metrics panel + confusion matrix in the Data Scientist tab
 - [x] AI: backend accepts the selected part / floor / waypoint as `context`, and has the guardrail (frontend still has to send `context`)
 - [ ] Infra: Databricks Delta tables + MLflow, backend reading from it. **If it isn't working by 3 AM, cut it.**
 - [ ] 3D: stretch polish (SPOT walking the route, waypoint ↔ part highlighting). **If it isn't working by 4 AM, cut it.**

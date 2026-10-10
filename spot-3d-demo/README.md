@@ -1,10 +1,22 @@
-# Spotlight — mission intelligence
+# spotat.work — dashboard frontend
 
-The React homepage is now the operator dashboard. The original articulated SPOT model remains in a compact companion panel and the **Robot explorer** view.
+React + Vite + Three.js. Three tabs, a shared AI assistant, and a live alarm, all reading the Python backend
+([`backend/`](../backend/)) and the Java ingest API's live stream ([`ingest-api/`](../ingest-api/)).
+
+| Tab | For | What's on it |
+|---|---|---|
+| **Overview** | Everyone | 3D Spot: click a part (or its chip) and the camera zooms in, with that part's data in plain language · KPIs · inclined two-floor map with an animated Floor 1 ↔ 2 swap, waypoints coloured by status · top findings |
+| **Data Scientist** | Technical users | V1 vs V2 with significance tests · failures per waypoint · model metrics, confusion matrix, CV, baselines · sortable/filterable missions, actions, readings and anomalies · **Generate PDF** |
+| **Operator** | Signed-in staff | Issue queue with filters → detail with status/assignee/note and audit trail · snapshots: KPI chart over time, save, compare two (▲/▼), export PDF · activity feed |
+
+Shared by all tabs:
+- **AI assistant** (bottom right): `POST /ask`, plain language on Overview and technical elsewhere. On Overview it sends the selected part, floor and waypoint as `context`.
+- **Live alarm**: subscribes to `GET /events` on the ingest API. A HIGH or CRITICAL anomaly, or one flagged for review, opens a full-screen alarm that can't be dismissed. The only ways out are **Not a problem** (with a reason) or **Mark as danger**. Alarms queue as "1 of N", and alarms still waiting are reloaded from `GET /ops/alerts` on startup. Click **Arm alarms 🔊** once to allow the Web Audio siren.
+- **Light / dark toggle** (top right, remembered). Theme tokens follow the Lamborghini-inspired design spec: true black, white, Lamborghini Gold `#FFC000` as the only accent, and sharp corners. All are CSS variables at the top of `src/styles.css`.
 
 ## Run locally
 
-From the repository root:
+Start the backend first (see [backend/README.md](../backend/README.md)), and optionally the ingest API for live missions. Then:
 
 ```powershell
 cd spot-3d-demo
@@ -12,68 +24,31 @@ npm install
 npm run dev
 ```
 
-Open the local URL printed by Vite. No account, domain, API key or hosting is required. The app loads the included fictional challenge data. For the complete test suite, use Node 22.22.2 or a supported Node 24.15+ release (jsdom's runtime requirement).
+Defaults are `http://localhost:8000` (backend) and `http://localhost:8081` (ingest API). Copy `.env.example` to
+`.env.local` to point elsewhere. Useful URLs: `#overview`, `#scientist`, `#operator`, and `?theme=light` or `?theme=dark`.
+
+**Demo the live alarm:** run `seed --reset` and `serve` on the ingest API with `INGEST_WEBHOOK_URL=http://localhost:8000/ops/ingest-hook`,
+sign in on the Operator tab, click **Arm alarms**, then run `feed --delay 8`. M020 raises the first alarm
+(CRITICAL abnormal temperature on HX-204).
 
 ```powershell
-npm test
-npm run build
-npm run preview
+npm test         # helper unit tests + 3D model geometry
+npm run build    # dist/ is the static site
 ```
 
-`dist/` contains the production website. This replaces the former standalone model demo; the folder name is retained for existing project workflows.
+## Layout
 
-## What to try
-
-1. Start in mission **M020**. Mission completion and inspection failures are shown separately.
-2. Click the red **WP07** map marker. The location panel explains the finding; click **Evidence** for source IDs, readings, timestamps, severity and a suggested next step.
-3. Switch between **Floor 01** and **Floor 02**. The map moves between levels and resets the location filter. Reduced-motion preferences disable animation.
-4. Open **Mission replay**, then step or play through the actual event order. Outcomes are hidden until their event arrives.
-5. Press **Ctrl+K** (or **Cmd+K**) to jump to a view, mission, waypoint, asset or action.
-6. Open **Live monitor → Run synthetic demo** to watch eight clearly labeled example events arrive. No robot is connected.
-7. Open **Robot explorer** for the original camera, pose, walking, body height, wireframe, quality and GLB export controls.
-8. Add a review or shift note and export a Markdown handover. Notes persist only in the current browser.
-
-The battery icon fills to the exact supplied percentage: **61–100% green**, **31–60% yellow**, **0–30% red**. Missing telemetry displays an unavailable value, never an invented charge.
-
-## Optional local event gateway
-
-Python 3.10+; no Python dependencies. After building:
-
-```powershell
-python server.py --replay public/data/live-demo.ndjson --interval 0.8
+```
+src/
+  App.jsx                 shell: tabs, theme, alarm arming, shared context
+  api.js                  fetch helper, useApi() hook (re-fetches on every live mission), sign-in session
+  SpotViewer.jsx          3D viewer: payloads, part hotspots, click-to-zoom camera (spotModel.js is the robot)
+  tabs/                   Overview, DataScientist
+  modules/ops/            Operator Console + sign-in (kept separate, like backend/app/ops)
+  components/             InclinedMap, AskPanel, AlarmCenter, DataTable, LineChart, ui
+  lib/                    format helpers, PDF report (shared by Generate PDF and snapshot export), siren
 ```
 
-Open `http://127.0.0.1:8765`, choose **Live monitor**, then **Connect gateway**. The server streams the included synthetic sample. Restart the server to replay it again.
-
-For an empty gateway accepting incoming Spotlight event JSON/NDJSON:
-
-```powershell
-python server.py
-```
-
-In another terminal, use `python scripts/send_live_demo.py` to POST invented example events. The protocol uses `/api/health` and `/api/events`; it supports the five kit lifecycle events plus `READING_CAPTURED` and `ANOMALY_DETECTED`. The example fields are visible in `public/data/live-demo.ndjson`. Importing an event log also works without a gateway.
-
-This loopback development gateway is separate from the repository's Java `ingest-api` and does not accept native Orbit webhooks. A deployed live service needs an authenticated adapter; static hosting supports archive/replay and the built-in synthetic demo. Browser live history is limited to 2,000 events, flags truncation, and stops when leaving Live monitor. Export before navigating away.
-
-## Evidence and scope
-
-- 27 missions, 270 actions, 220 readings, 40 anomalies and 15 waypoints from the earlier normalized challenge dataset, now included in `public/data/mission-data.json`.
-- Source flags are preserved. No invented numeric alarm thresholds, confidence probabilities or linked inspection photos.
-- The map uses supplied XY coordinates and the action waypoint. Registry conflicts are disclosed. Its architectural outline is illustrative; route lines indicate inspection order, not robot path geometry.
-- Recorded timestamps have no supplied timezone. Replay-linked CSV observations are explicitly reconstructed; M023 has partial replay, and M024–M027 have none.
-- Reviewing a finding never clears the underlying anomaly or declares equipment healthy.
-- The 3D model is a cosmetic, original stylization, not official CAD, telemetry or robot control. It retains 4,032 model triangles, on-demand drawing, capped rendering and offscreen suspension. GLB export contains the selected pose, not procedural walk animation.
-
-## Implementation and verification
-
-`src/App.jsx` coordinates navigation and state. `src/components/` contains the views, map, battery indicator, evidence drawer and robot panels. `src/lib/` contains the archive/replay engine, live-event reducer and display helpers. The original `SpotViewer.jsx`, `SpotViewer.css`, `spotModel.js` and model tests are unchanged.
-
-`npm test` covers evidence joins, replay boundaries, live conflict handling, battery bands, map findings, model geometry and React interactions. The DOM tests substitute the WebGL viewer and polyfill dialogs; they do not verify browser layout, GPU rendering or native focus trapping. The production build retains a separate lazy-loaded Three.js chunk.
-
-Optional gateway checks:
-
-```powershell
-python -m unittest discover -s tests -p test_server.py -v
-```
-
-If a sandbox restricts its temporary directory, create a writable directory and set `SPOTLIGHT_TEST_TMP` to that directory before running the Python checks.
+The 3D model is an original stylization, not official Boston Dynamics CAD. The CAM+IR, microphone and antenna
+payloads are added in the viewer so every data source has something to click. Waypoint x/y come from
+`locations.csv`, and the floor grid is schematic. Inspection pictures are reference images from the kit, not live captures.

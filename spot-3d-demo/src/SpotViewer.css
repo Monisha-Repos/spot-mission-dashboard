@@ -1,6 +1,30 @@
 /* Portable viewer styles; the parent must have position: relative and a height. */
-.canvas-host { position: absolute; inset: 0; touch-action: none; }
+.canvas-host { position: absolute; inset: 0; touch-action: none; overflow: hidden; }
 .canvas-host canvas { display: block; width: 100%; height: 100%; cursor: grab; }
 .canvas-host canvas:active { cursor: grabbing; }
-.canvas-host .viewer-error { position: absolute; inset: 16%; z-index: 5; padding: 24px; border: 1px solid #d3dac7; border-radius: 10px; background: #fafbf5; color: #292e28; font: 13px/1.7 system-ui, sans-serif; }
-.canvas-host .viewer-error button { cursor: pointer; padding: 8px 14px; border: 1px solid #bcc7b0; border-radius: 5px; background: #eef1e6; }
+.canvas-host .viewer-error { position: absolute; inset: 16%; z-index: 5; padding: 24px; border: 1px solid var(--line, #333); background: var(--surface, #202020); color: var(--text, #fff); font: 13px/1.7 var(--font, system-ui, sans-serif); }
+.canvas-host .viewer-error button { cursor: pointer; padding: 8px 14px; border: 1px solid var(--line-strong, #777); border-radius: 0; background: transparent; color: inherit; }
+
+/* Part hotspots: positioned by the viewer every frame. */
+.hotspot {
+  position: absolute; left: 0; top: 0; z-index: 2; visibility: hidden;
+  display: flex; align-items: center; gap: 8px; padding: 0; border: 0; background: none;
+  color: var(--text, #fff); cursor: pointer; font: inherit;
+}
+.hotspot-dot {
+  width: 16px; height: 16px; flex: none; border: 2px solid var(--text, #fff);
+  clip-path: polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%);
+  background: var(--status-color, var(--accent, #ffc000));
+}
+.hotspot.tone-ok { --status-color: var(--ok); }
+.hotspot.tone-warn { --status-color: var(--warn); }
+.hotspot.tone-bad { --status-color: var(--bad); }
+.hotspot-label {
+  padding: 3px 8px; background: var(--overlay, rgba(0,0,0,.7)); color: var(--on-overlay, #fff);
+  font-size: 10px; letter-spacing: .12em; text-transform: uppercase; white-space: nowrap;
+  opacity: 0; transition: opacity .15s;
+}
+.hotspot:hover .hotspot-label, .hotspot:focus-visible .hotspot-label, .hotspot.is-active .hotspot-label { opacity: 1; }
+.hotspot.is-active .hotspot-dot { background: var(--accent, #ffc000); outline: 2px solid var(--accent, #ffc000); outline-offset: 3px; }
+.hotspot:focus-visible { outline: none; }
+.hotspot:focus-visible .hotspot-dot { outline: 2px solid var(--accent, #ffc000); outline-offset: 3px; }

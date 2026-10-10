@@ -6,6 +6,37 @@ All commands run from the `ingest-api` folder unless a step says otherwise.
 
 ---
 
+## Quick start (everything already set up)
+
+Three terminals, one command each. Start them in this order:
+
+| # | Folder | Command | Ready when you see |
+|---|---|---|---|
+| 1 | `ingest-api` | `.\run.ps1 serve` | `SPOT ingest API listening on http://localhost:8081` |
+| 2 | `backend` | `..\.venv\Scripts\python -m uvicorn app.main:create_app --factory --port 8000` | `Application startup complete` |
+| 3 | `spot-3d-demo` | `npm run dev` | `Local: http://127.0.0.1:5173/` |
+
+Open **http://127.0.0.1:5173**. Sign in on the **Operator** tab with the `OPS_PIN` from `backend\.env`.
+
+Common commands:
+
+| Task | Folder | Command |
+|---|---|---|
+| Stream the 9 live (IMPROVED) missions | `ingest-api` | `.\run.ps1 feed --delay 8` |
+| Reset the lakehouse to baseline only | `ingest-api` | `.\run.ps1 seed --reset` (stop `serve` first) |
+| Clear operator issues and snapshots | `backend` | `..\.venv\Scripts\python manage.py reset-ops` (stop the backend first) |
+| Check where the backend reads data from | `backend` | `..\.venv\Scripts\python manage.py check` |
+| Reload data without restarting | any | `curl.exe -X POST http://localhost:8000/admin/refresh` |
+| Health checks | any | `curl.exe http://localhost:8081/health` · `curl.exe http://localhost:8000/health` |
+| Backend API docs | browser | http://localhost:8000/docs |
+| Run all tests | repo root | `cd backend; ..\.venv\Scripts\python -m pytest -q; cd ..\spot-3d-demo; npm test` |
+
+**Demo in 4 steps:** reset (section 4) → start the three terminals → in the dashboard, sign in on **Operator** and click **Arm alarms 🔊** → run `.\run.ps1 feed --delay 8`. The first alarm fires on M020.
+
+First time on this machine? Do sections 1, 2b and 2c once.
+
+---
+
 ## 1. One-time setup
 
 ### 1.1 Check Java (17 or newer)
@@ -104,11 +135,9 @@ python -m venv .venv
 Copy-Item backend\.env.example backend\.env
 code backend\.env
 ```
-
-run...
-.venv\Scripts\pip install -r backend\requirements.txt
-Copy-Item backend\.env.example backend\.env
-code backend\.env
+If `python -m venv .venv` says `Unable to copy ... python.exe`, the venv already exists and is in use. Skip that line.
+If `pip install` says `Access is denied`, a backend from this venv is still running. Stop it (Ctrl+C, or
+`Get-Process python | Stop-Process` if it was started elsewhere) and run the install again.
 
 In `backend\.env` set at least:
 ```
@@ -144,6 +173,26 @@ curl.exe http://localhost:8000/health
 curl.exe http://localhost:8000/ops/snapshots
 ```
 `/health` should show `"missions":18`; `/ops/snapshots` should list 7 `Baseline through 2026-09-0X` snapshots.
+
+---
+
+## 2c. Run the dashboard (frontend)
+
+Needs Node 22+ (`node -v`). Once:
+```powershell
+cd C:\_MonishaN\CS\PROJECTS\Spot-Mission-Dashboard\spot-3d-demo
+npm install
+```
+
+### Terminal 5: start the dashboard
+```powershell
+cd C:\_MonishaN\CS\PROJECTS\Spot-Mission-Dashboard\spot-3d-demo
+npm run dev
+```
+Open http://127.0.0.1:5173. It talks to the backend on `:8000` and the ingest API's live stream on `:8081`; copy
+`.env.example` to `.env.local` to change those. The header shows **Live** when the stream is connected.
+
+Handy links: http://127.0.0.1:5173/#scientist, http://127.0.0.1:5173/#operator, `?theme=light`.
 
 ---
 
@@ -251,6 +300,9 @@ Remove-Item Env:SINK
 | Backend: alarms never appear / no `After M0xx` snapshots | `INGEST_WEBHOOK_URL` or `INGEST_API_KEY` missing or different in the two `.env` files; restart `serve` after fixing. |
 | Backend: `lakehouse unavailable` (HTTP 503) | Databricks unreachable or warehouse asleep. Wake it, then `curl.exe -X POST http://localhost:8000/admin/refresh`. |
 | Backend: assistant answers "Here's what I found in the data" | No LLM configured (or the call failed: see `llm_error` in the response). Set `ANTHROPIC_API_KEY` or `HF_TOKEN`. |
+| Dashboard: "Can't reach the backend at http://localhost:8000" | The backend (Terminal 4) isn't running, or it's on another port. Set `VITE_API_URL` in `spot-3d-demo\.env.local` and restart `npm run dev`. |
+| Dashboard: header says **Offline** | The ingest API (`serve`) isn't running. Data still shows; live alarms and auto-refresh need it. |
+| Dashboard: no siren | Click **Arm alarms 🔊** once after the page loads. Browsers block sound until you click. |
 | Backend: `model was trained with scikit-learn X` warning | Reinstall with `pip install -r backend\requirements.txt`, or retrain with `python ml\train.py`. |
 
 ---
