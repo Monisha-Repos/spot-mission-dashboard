@@ -174,7 +174,7 @@ Remove-Item Env:SINK
 | `Databricks statement FAILED: ... SCHEMA_NOT_FOUND / CATALOG_NOT_FOUND` | Check `DATABRICKS_CATALOG=workspace` (Free Edition). Other workspaces may use `main`. |
 | `waiting for the API at http://localhost:8081` then `no API answering` | `serve` isn't running, or it's on a different `PORT`. |
 | `Address already in use` | Another `serve` is still running. Close it, or set `PORT=8082`. |
-| `kit data folder not found` | Run from the `ingest-api` folder, or set `KIT_DATA_DIR` to the kit's `02_DATA` path. |
+| `kit data folder not found` | Run from the `ingest-api` folder, or set `KIT_DATA_DIR` to the `data/kit` folder. |
 | `M0xx already in the lakehouse, skipped` | Expected after a feed. Run `seed --reset` to start over. |
 | `javac` is not recognized | Install a JDK (step 1.1). A JRE alone can't compile. |
 

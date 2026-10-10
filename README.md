@@ -127,7 +127,21 @@ cd Spot-Mission-Dashboard
 
 ## Project Structure
 
-_Coming soon._
+```
+├── ingest-api/              Java live-data API → Databricks lakehouse (see RUNBOOK.md)
+├── data/
+│   ├── kit/                 challenge data: CSVs, replay.ndjson, data dictionary
+│   └── lakehouse/           offline lakehouse written by ingest-api (git-ignored)
+├── assets/
+│   ├── maps/                floor plan, waypoint legend, facility overview
+│   └── inspection-images/   sample thermal / visual / acoustic / gauge images
+├── docs/
+│   ├── challenge/           challenge brief, data assumptions, start-here
+│   ├── spot-user-guide/     Spot user guide (PDF, pages 1–72)
+│   └── orbit-screenshots/   reference screenshots of Boston Dynamics' Orbit software
+├── tools/kit-starter/       the kit's Python starter scripts
+└── TODO.md                  plan, product spec, task list
+```
 
 ## Demo
 

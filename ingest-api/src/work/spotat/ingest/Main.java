@@ -121,7 +121,7 @@ public final class Main {
     }
 
     private static Path kitDir(Config config) {
-        return Path.of(config.get("KIT_DATA_DIR", "../SPOT_KnightHacks_Challenge_Kit Part One/02_DATA"));
+        return Path.of(config.get("KIT_DATA_DIR", "../data/kit"));
     }
 
     /** Parses {@code --name value} pairs; a flag with no value is "true". */

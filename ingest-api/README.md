@@ -60,7 +60,7 @@ Set these in `.env` or as environment variables (see `.env.example`):
 | `LAKEHOUSE_DIR` | `../data/lakehouse` | Local target: one CSV per table, same format as the kit |
 | `DATABRICKS_HOST`, `DATABRICKS_HTTP_PATH`, `DATABRICKS_TOKEN` | | Databricks target, written through the SQL Statement Execution API (`DATABRICKS_WAREHOUSE_ID` also works in place of the HTTP path) |
 | `DATABRICKS_CATALOG`, `DATABRICKS_SCHEMA` | `workspace`, `spot` | Where the Delta tables live (Free Edition's catalog is `workspace`) |
-| `KIT_DATA_DIR` | `../SPOT_KnightHacks_Challenge_Kit Part One/02_DATA` | Source data for `seed` and `feed` |
+| `KIT_DATA_DIR` | `../data/kit` | Source data for `seed` and `feed` |
 | `PORT` | `8081` | |
 | `INGEST_API_KEY` | | When set, `POST` requests need the header `X-API-Key` |
 | `INGEST_WEBHOOK_URL` | | Called after each ingest, for example the Python backend's `/ops/ingest-hook` |

@@ -9,7 +9,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-/** One CSV per table, same layout as the kit's 02_DATA files, so the Python backend can read either. */
+/** One CSV per table, same layout as the kit files in data/kit, so the Python backend can read either. */
 final class LocalCsvSink implements Sink {
     private final Path dir;
 

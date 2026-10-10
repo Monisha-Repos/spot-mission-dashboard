@@ -125,7 +125,7 @@ The Overview and Data Scientist tabs **show** what happened. The Operator Consol
 When a live mission brings in an anomaly that is HIGH or CRITICAL, or has `operator_review_required = True`, every open dashboard tab shows a full-screen alarm that stays up until someone makes a decision. In the kit's IMPROVED data that happens 5 times across 9 missions (M020, M022, M024, M025, M027).
 - **How it gets there:** the frontend opens `EventSource(INGEST_URL + "/events")`. Each `mission_ingested` event already includes its `alerts[]` (the anomaly plus the reading that triggered it), so the pop-up appears with no extra request. The data views also refresh on every event, so new missions show up live.
 - **Sound:** a two-tone siren made with the Web Audio API (alternating 600 Hz and 900 Hz every 0.4 s, looping until a decision). No audio file is needed. Browsers block sound until the page has been clicked, so show an **"Arm alarms 🔊"** button on load and click it at the start of the demo. A **Mute** button stops the sound but keeps the pop-up.
-- **What it shows:** a red flashing border; severity and type in large text ("CRITICAL · ABNORMAL TEMPERATURE"); asset name and criticality; waypoint name and floor; the reading compared with normal ("41.4 °C"); the time and mission; a **floor-plan crop with the waypoint pulsing** (x/y from `locations.csv`); and a **picture of the situation** from `04_ASSETS/sample_inspection_images`, labelled as a reference image:
+- **What it shows:** a red flashing border; severity and type in large text ("CRITICAL · ABNORMAL TEMPERATURE"); asset name and criticality; waypoint name and floor; the reading compared with normal ("41.4 °C"); the time and mission; a **floor-plan crop with the waypoint pulsing** (x/y from `locations.csv`); and a **picture of the situation** from `assets/inspection-images/`, labelled as a reference image:
 
   | anomaly_type | image |
   |---|---|
@@ -240,7 +240,7 @@ Plain JDK 17 with no dependencies; see [ingest-api/README.md](ingest-api/README.
 - [x] `feed --delay 8`: replays the 9 IMPROVED missions through the API as if SPOT were sending them live
 - [x] Two storage targets: Databricks Delta (Statement Execution API) or local CSVs in `data/lakehouse/` (offline fallback, same format as the kit)
 - [x] Optional `INGEST_API_KEY` for writes, and `INGEST_WEBHOOK_URL` → `/ops/ingest-hook`
-- [ ] Python backend reads the **lakehouse** (`data/lakehouse/` or Databricks), not the kit's `02_DATA`, so live missions show up — _owner:_
+- [ ] Python backend reads the **lakehouse** (`data/lakehouse/` or Databricks), not the raw kit files in `data/kit/`, so live missions show up — _owner:_
 - [ ] Deploy next to the backend (Render / Railway: `javac` build, `java -cp out work.spotat.ingest.Main serve`) — _owner:_
 - [ ] Test against real Databricks once the workspace is up (only tested on the local CSV target so far) — _owner:_
 
@@ -297,7 +297,7 @@ Judges trust numbers. Shown in the Data Scientist tab.
 ### P3: Stretch Polish
 - [ ] Animate SPOT walking its route across the inclined map during a mission replay — _owner:_
 - [ ] Clicking a waypoint on the map highlights the SPOT part that took that reading — _owner:_
-- [ ] Inspection images (`04_ASSETS/sample_inspection_images`) shown in the part info panel — _owner:_
+- [ ] Inspection images (`assets/inspection-images/`) shown in the part info panel — _owner:_
 
 ---
 
@@ -322,7 +322,7 @@ Each phase lists **what** gets done, **how**, and **who** works in parallel. Don
 - **Frontend / UX**: _Mock JSON copied from the API contract_
   - [ ] App shell: header, Overview / Data Scientist tabs, light theme with SPOT color variables
   - [ ] AI popup component (UI only, canned reply)
-- **Data / ML**: _Start from `05_STARTER_CODE/load_data.py`. Join actions → readings/anomalies → assets/locations._
+- **Data / ML**: _Start from `tools/kit-starter/load_data.py`. Join actions → readings/anomalies → assets/locations._
   - [ ] Load and join all CSVs into Inspection Records
   - [ ] Save as `data/processed/records.json` (or parquet)
 - **Backend / AI**: _FastAPI_

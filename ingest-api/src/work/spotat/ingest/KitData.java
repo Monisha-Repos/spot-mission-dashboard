@@ -9,7 +9,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-/** The challenge kit's 02_DATA CSVs, regrouped into one bundle per mission. */
+/** The challenge kit CSVs in data/kit, regrouped into one bundle per mission. */
 final class KitData {
     private final Map<Schema.Table, List<Map<String, String>>> tables = new LinkedHashMap<>();
 

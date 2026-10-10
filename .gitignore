@@ -222,3 +222,6 @@ __marimo__/
 # Ingest API build output and local lakehouse
 ingest-api/out/
 data/lakehouse/
+
+# macOS folder metadata
+.DS_Store
