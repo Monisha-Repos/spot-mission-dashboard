@@ -144,6 +144,46 @@ export function batteryAt(points, at) {
 /** The next finding revealed strictly after `at`, or null. */
 export const nextFindingAfter = (tl, at) => tl.findings.find(s => s.revealAt > at) || null;
 
+/** The stop Spot is at (or last left) at `at` ms; the first stop before the run starts. */
+export const stopAt = (tl, at) => [...tl.stops].reverse().find(s => s.start <= at) || tl.stops[0] || null;
+
+/**
+ * Stack timeline flag labels into lanes so they don't overlap.
+ * items: [{ pos: 0–1 along the track, w: label width in px }] in time order; trackPx: track width.
+ * Labels near the ends hang inwards (matching the CSS), the rest are centred on their flag.
+ * Returns the lane (0 = lowest) for each item; with more overlaps than lanes, the lane that frees up first is reused.
+ */
+export function flagLanes(items, trackPx, maxLanes = 4, gap = 6) {
+  const ends = [];
+  return items.map(({ pos, w }) => {
+    const x = pos * trackPx;
+    const left = pos > 0.8 ? x - w : pos < 0.2 ? x : x - w / 2;
+    let lane = ends.findIndex(end => left >= end + gap);
+    if (lane === -1) lane = ends.length < maxLanes ? ends.length : ends.indexOf(Math.min(...ends));
+    ends[lane] = left + w;
+    return lane;
+  });
+}
+
+/**
+ * Which side of its dot each map label goes on, away from its nearest neighbour when they are closer than `near`
+ * (map units, 0–100). points: [{ id, x, y }] with y pointing up. Returns { id: 'below' | 'above' | 'left' | 'right' }.
+ */
+export function labelSides(points, near = 9) {
+  return Object.fromEntries(points.map(p => {
+    let best = null, bestDist = Infinity;
+    for (const q of points) {
+      if (q === p) continue;
+      const d = Math.hypot(q.x - p.x, q.y - p.y);
+      if (d < bestDist) { bestDist = d; best = q; }
+    }
+    if (!best || bestDist >= near) return [p.id, 'below'];
+    const dx = p.x - best.x, dy = p.y - best.y;
+    if (Math.abs(dx) > Math.abs(dy)) return [p.id, dx >= 0 ? 'right' : 'left'];
+    return [p.id, dy >= 0 ? 'above' : 'below'];
+  }));
+}
+
 const pad = n => String(n).padStart(2, '0');
 
 /** Elapsed time as "+MM:SS" (or "+H:MM:SS"). */

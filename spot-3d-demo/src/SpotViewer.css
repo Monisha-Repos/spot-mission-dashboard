@@ -37,10 +37,11 @@
   font-size: 10px; letter-spacing: .12em; text-transform: uppercase; white-space: nowrap;
   opacity: 0; transition: opacity .15s; pointer-events: none;
 }
-.hotspot:hover .hotspot-label, .hotspot:focus-visible .hotspot-label, .hotspot.is-active .hotspot-label { opacity: 1; }
+/* .is-hover: the matching part button outside the canvas is hovered or focused. */
+.hotspot:hover .hotspot-label, .hotspot:focus-visible .hotspot-label, .hotspot.is-active .hotspot-label, .hotspot.is-hover .hotspot-label { opacity: 1; }
 /* Hovered or selected: the halo stops and a steady ring takes its place. */
-.hotspot:hover .hotspot-dot::after, .hotspot.is-active .hotspot-dot::after { animation: none; opacity: 0; }
-.hotspot:hover .hotspot-dot, .hotspot.is-active .hotspot-dot, .hotspot:focus-visible .hotspot-dot {
+.hotspot:hover .hotspot-dot::after, .hotspot.is-active .hotspot-dot::after, .hotspot.is-hover .hotspot-dot::after { animation: none; opacity: 0; }
+.hotspot:hover .hotspot-dot, .hotspot.is-active .hotspot-dot, .hotspot:focus-visible .hotspot-dot, .hotspot.is-hover .hotspot-dot {
   outline: 2px solid var(--signal); outline-offset: 3px;
 }
 .hotspot.is-active .hotspot-dot { width: 14px; height: 14px; }

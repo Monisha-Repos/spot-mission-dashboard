@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { api, asset, INGEST_URL, useApi, useApp } from '../api.js';
 import { FloorPlane } from './InclinedMap.jsx';
-import { FadeImg } from './ui.jsx';
+import { ZoomImg } from './ui.jsx';
 import LoginForm from '../modules/ops/LoginForm.jsx';
 import { formatTime, humanize, measurementLabel, num, reading, titleCase } from '../lib/format.js';
 
@@ -34,7 +34,7 @@ function fromEvent(a, event, waypoints) {
 }
 
 export default function AlarmCenter({ siren, muted, onMute, onActive, onStream }) {
-  const { session, bump } = useApp();
+  const { session, bump, notify } = useApp();
   const pending = useApi('/ops/alerts?pending=true');
   const waypoints = useApi('/waypoints');
   const [live, setLive] = useState({});
@@ -97,6 +97,7 @@ export default function AlarmCenter({ siren, muted, onMute, onActive, onStream }
     setError('');
     try {
       await api(`/ops/alerts/${current.anomaly_id}/decision`, { method: 'POST', body: { decision, note }, token: session?.token });
+      notify(decision === 'DANGER' ? 'Marked as danger' : 'Alarm overridden');
       setDone(d => new Set(d).add(current.anomaly_id));
       setIndex(0);
       bump();
@@ -153,8 +154,8 @@ export default function AlarmCenter({ siren, muted, onMute, onActive, onStream }
               </div>
             )}
             <figure className="evidence evidence-sm">
-              <FadeImg src={asset(current.image)} alt={`Reference image for ${humanize(current.type)}`} />
-              <figcaption>Reference image (not a live capture)</figcaption>
+              <ZoomImg src={asset(current.image)} alt={`Reference image for ${humanize(current.type)}`} />
+              <figcaption>Reference image (not a live capture) · click to enlarge</figcaption>
             </figure>
           </div>
         </div>

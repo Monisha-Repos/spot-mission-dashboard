@@ -1,11 +1,16 @@
 import React, { useState } from 'react';
-import { useApi } from '../api.js';
-import { Async, Badge, Section, Segmented, Stat } from '../components/ui.jsx';
+import { useApi, useApp } from '../api.js';
+import { Async, Badge, Hint, Section, Segmented, Stat } from '../components/ui.jsx';
 import DataTable from '../components/DataTable.jsx';
 import { downloadReport } from '../lib/report.js';
-import { kpiLabel, num, severityTone, tone } from '../lib/format.js';
+import {
+  GLOSSARY, deltaArrow, formatTime, humanize, kpiDelta, kpiLabel, kpiValue, measurementLabel, num, sentence, severityTone, tone,
+} from '../lib/format.js';
+import { scrollToEl } from '../lib/dom.js';
 
 const statusCell = r => <Badge tone={tone(r.status)}>{r.status}</Badge>;
+const asText = v => sentence(v);
+const RISK_HINT = GLOSSARY.predicted_failure_risk;
 
 const TABLES = {
   missions: {
@@ -14,12 +19,12 @@ const TABLES = {
     columns: [
       { key: 'mission_id', label: 'Mission' },
       { key: 'configuration_version', label: 'Config' },
-      { key: 'scenario', label: 'Scenario' },
-      { key: 'mission_status', label: 'Status' },
-      { key: 'start_time', label: 'Start' },
+      { key: 'scenario', label: 'Scenario', show: asText },
+      { key: 'mission_status', label: 'Status', show: asText },
+      { key: 'start_time', label: 'Start', show: v => formatTime(v) },
       { key: 'duration_min', label: 'Min', num: true },
-      { key: 'start_battery_pct', label: 'Batt start', num: true },
-      { key: 'end_battery_pct', label: 'Batt end', num: true },
+      { key: 'start_battery_pct', label: 'Batt start %', num: true },
+      { key: 'end_battery_pct', label: 'Batt end %', num: true },
       { key: 'actions', label: 'Actions', num: true },
       { key: 'failed_actions', label: 'Failed', num: true },
       { key: 'anomalies', label: 'Anomalies', num: true },
@@ -27,7 +32,7 @@ const TABLES = {
     ],
     filters: [
       { key: 'configuration_version', label: 'Config', get: r => r.configuration_version },
-      { key: 'mission_status', label: 'Status', get: r => r.mission_status },
+      { key: 'mission_status', label: 'Status', get: r => r.mission_status, show: asText },
     ],
   },
   actions: {
@@ -37,22 +42,22 @@ const TABLES = {
       { key: 'action_id', label: 'Action' },
       { key: 'mission_id', label: 'Mission' },
       { key: 'sequence', label: 'Seq', num: true },
-      { key: 'action_type', label: 'Type' },
+      { key: 'action_type', label: 'Type', show: asText },
       { key: 'location', label: 'Waypoint', get: r => r.location.id },
       { key: 'asset', label: 'Asset', get: r => r.asset.id },
-      { key: 'outcome', label: 'Outcome' },
-      { key: 'failure_type', label: 'Failure type' },
-      { key: 'battery_pct', label: 'Battery', num: true },
+      { key: 'outcome', label: 'Outcome', show: asText },
+      { key: 'failure_type', label: 'Failure type', show: asText },
+      { key: 'battery_pct', label: 'Battery %', num: true },
       { key: 'duration_sec', label: 'Sec', num: true },
-      { key: 'predicted_failure_risk', label: 'Risk', num: true, render: r => num(r.predicted_failure_risk, 3) },
+      { key: 'predicted_failure_risk', label: 'Risk', num: true, hint: RISK_HINT, render: r => num(r.predicted_failure_risk, 3) },
       { key: 'status', label: 'Status', render: statusCell },
     ],
     filters: [
       { key: 'configuration_version', label: 'Config', get: r => r.configuration_version },
-      { key: 'action_type', label: 'Type', get: r => r.action_type },
-      { key: 'outcome', label: 'Outcome', get: r => r.outcome },
+      { key: 'action_type', label: 'Type', get: r => r.action_type, show: asText },
+      { key: 'outcome', label: 'Outcome', get: r => r.outcome, show: asText },
       { key: 'location', label: 'Waypoint', get: r => r.location.id },
-      { key: 'status', label: 'Status', get: r => r.status },
+      { key: 'status', label: 'Status', get: r => r.status, show: asText },
     ],
   },
   readings: {
@@ -63,18 +68,18 @@ const TABLES = {
       { key: 'reading_id', label: 'Reading', get: r => r.reading.reading_id },
       { key: 'action_id', label: 'Action' },
       { key: 'mission_id', label: 'Mission' },
-      { key: 'measurement_type', label: 'Measurement', get: r => r.reading.measurement_type },
+      { key: 'measurement_type', label: 'Measurement', get: r => r.reading.measurement_type, show: v => measurementLabel(v) },
       { key: 'value', label: 'Value', num: true, get: r => r.reading.value },
       { key: 'unit', label: 'Unit', get: r => r.reading.unit },
-      { key: 'quality', label: 'Quality', get: r => r.reading.quality },
+      { key: 'quality', label: 'Quality', get: r => r.reading.quality, show: asText },
       { key: 'range', label: 'Usual range', get: r => (r.reading.usual_range ? `${num(r.reading.usual_range.low)}–${num(r.reading.usual_range.high)}` : null) },
-      { key: 'position', label: 'Position', get: r => r.reading.position },
+      { key: 'position', label: 'Position', get: r => r.reading.position, show: asText },
       { key: 'location', label: 'Waypoint', get: r => r.location.id },
     ],
     filters: [
-      { key: 'measurement_type', label: 'Measurement', get: r => r.reading.measurement_type },
-      { key: 'quality', label: 'Quality', get: r => r.reading.quality },
-      { key: 'position', label: 'Position', get: r => r.reading.position },
+      { key: 'measurement_type', label: 'Measurement', get: r => r.reading.measurement_type, show: v => measurementLabel(v) },
+      { key: 'quality', label: 'Quality', get: r => r.reading.quality, show: asText },
+      { key: 'position', label: 'Position', get: r => r.reading.position, show: asText },
       { key: 'configuration_version', label: 'Config', get: r => r.configuration_version },
     ],
   },
@@ -86,15 +91,15 @@ const TABLES = {
       { key: 'anomaly_id', label: 'Anomaly', get: r => r.anomaly.anomaly_id },
       { key: 'action_id', label: 'Action' },
       { key: 'mission_id', label: 'Mission' },
-      { key: 'type', label: 'Type', get: r => r.anomaly.type },
+      { key: 'type', label: 'Type', get: r => r.anomaly.type, show: asText },
       { key: 'severity', label: 'Severity', get: r => r.anomaly.severity, render: r => <Badge tone={severityTone(r.anomaly.severity)}>{r.anomaly.severity}</Badge> },
       { key: 'review', label: 'Review', get: r => (r.anomaly.operator_review_required ? 'yes' : 'no') },
       { key: 'location', label: 'Waypoint', get: r => r.location.id },
       { key: 'asset', label: 'Asset', get: r => r.asset.id },
-      { key: 'criticality', label: 'Criticality', get: r => r.asset.criticality },
+      { key: 'criticality', label: 'Criticality', get: r => r.asset.criticality, show: asText },
     ],
     filters: [
-      { key: 'type', label: 'Type', get: r => r.anomaly.type },
+      { key: 'type', label: 'Type', get: r => r.anomaly.type, show: asText },
       { key: 'severity', label: 'Severity', get: r => r.anomaly.severity },
       { key: 'configuration_version', label: 'Config', get: r => r.configuration_version },
     ],
@@ -110,10 +115,23 @@ const WAYPOINT_COLUMNS = [
   { key: 'v1', label: 'V1 %', num: true, get: w => w.by_configuration?.V1?.failure_pct ?? null },
   { key: 'v2', label: 'V2 %', num: true, get: w => w.by_configuration?.V2?.failure_pct ?? null },
   { key: 'anomalies', label: 'Anomalies', num: true },
-  { key: 'top', label: 'Failure types', get: w => Object.entries(w.top_failures || {}).map(([k, v]) => `${k} ×${v}`).join(', ') },
-  { key: 'predicted_failure_risk', label: 'Risk', num: true },
+  { key: 'top', label: 'Failure types', get: w => Object.entries(w.top_failures || {}).map(([k, v]) => `${humanize(k)} ×${v}`).join(', ') },
+  { key: 'predicted_failure_risk', label: 'Risk', num: true, hint: RISK_HINT },
   { key: 'status', label: 'Status', render: statusCell },
 ];
+
+const SECTIONS = [['ds-compare', 'Comparison'], ['ds-waypoints', 'Waypoints'], ['ds-model', 'Model'], ['ds-tables', 'Raw data']];
+
+/** "Improved ▼ −27.9 pp": the arrow is the real direction, the word says whether that is good. */
+function Change({ k, d, verdict }) {
+  const cls = verdict === 'improved' ? 'tone-ok' : verdict === 'degraded' ? 'tone-bad' : '';
+  return (
+    <td className={`num delta ${cls}`}>
+      {verdict === 'improved' || verdict === 'degraded' ? <span className="verdict">{verdict === 'improved' ? 'Improved' : 'Worse'}</span> : null}
+      <span aria-hidden="true">{deltaArrow(d)}</span> {kpiDelta(k, d)}
+    </td>
+  );
+}
 
 function Outcomes({ compare }) {
   const { V1, V2, tests, summary, changes } = compare;
@@ -128,30 +146,27 @@ function Outcomes({ compare }) {
       <div className="table-scroll">
         <table>
           <caption className="sr-only">BASELINE (V1) vs IMPROVED (V2)</caption>
-          <thead><tr><th scope="col">KPI</th><th scope="col" className="num">V1 · {V1.missions} missions</th><th scope="col" className="num">V2 · {V2.missions} missions</th><th scope="col" className="num">Δ</th></tr></thead>
+          <thead><tr><th scope="col">KPI</th><th scope="col" className="num">V1 · {V1.missions} missions</th><th scope="col" className="num">V2 · {V2.missions} missions</th><th scope="col" className="num">Change V1 → V2</th></tr></thead>
           <tbody>
-            {headline.map(k => {
-              const d = V2[k] - V1[k];
-              const v = verdict[k];
-              return (
-                <tr key={k}>
-                  <th scope="row">{kpiLabel(k)}</th>
-                  <td className="num">{num(V1[k])}</td>
-                  <td className="num">{num(V2[k])}</td>
-                  <td className={`num delta ${v === 'improved' ? 'tone-ok' : v === 'degraded' ? 'tone-bad' : ''}`}>{v === 'improved' ? '▲' : v === 'degraded' ? '▼' : ''} {d > 0 ? '+' : ''}{num(d)}</td>
-                </tr>
-              );
-            })}
+            {headline.map(k => (
+              <tr key={k}>
+                <th scope="row">{kpiLabel(k)}{GLOSSARY[k] && <Hint text={GLOSSARY[k]} label={`What is ${kpiLabel(k)}?`} />}</th>
+                <td className="num">{kpiValue(k, V1[k])}</td>
+                <td className="num">{kpiValue(k, V2[k])}</td>
+                <Change k={k} d={V2[k] - V1[k]} verdict={verdict[k]} />
+              </tr>
+            ))}
           </tbody>
         </table>
       </div>
+      <p className="table-note muted">▲ / ▼ show which way the number moved; the word says whether that is better. Changes in percentages are in percentage points (pp).<Hint text={GLOSSARY.pp} label="What is a percentage point?" /></p>
       <h3>Significance</h3>
       <div className="table-scroll">
         <table>
-          <thead><tr><th scope="col">Test</th><th scope="col" className="num">V1</th><th scope="col" className="num">V2</th><th scope="col" className="num">p-value</th><th scope="col">Method</th></tr></thead>
+          <thead><tr><th scope="col">Test</th><th scope="col" className="num">V1</th><th scope="col" className="num">V2</th><th scope="col" className="num">p-value<Hint text={GLOSSARY.p_value} label="What is a p-value?" /></th><th scope="col">Method</th></tr></thead>
           <tbody>
             {Object.entries(tests).map(([k, t]) => (
-              <tr key={k}><th scope="row">{k.replace(/_/g, ' ')}</th><td className="num">{t.V1}</td><td className="num">{t.V2}</td><td className={`num ${t.p_value < 0.05 ? 'tone-ok' : ''}`}>{t.p_value}</td><td>{t.method}</td></tr>
+              <tr key={k}><th scope="row">{sentence(k)}</th><td className="num">{t.V1}</td><td className="num">{t.V2}</td><td className={`num ${t.p_value < 0.05 ? 'tone-ok' : ''}`}>{t.p_value}</td><td>{t.method}</td></tr>
             ))}
           </tbody>
         </table>
@@ -159,10 +174,10 @@ function Outcomes({ compare }) {
       <h3>Success rate by action type</h3>
       <div className="table-scroll">
         <table>
-          <thead><tr><th scope="col">Action type</th><th scope="col" className="num">V1 %</th><th scope="col" className="num">V2 %</th></tr></thead>
+          <thead><tr><th scope="col">Action type</th><th scope="col" className="num">V1</th><th scope="col" className="num">V2</th></tr></thead>
           <tbody>
             {Object.keys(V1.action_success_pct_by_type).map(t => (
-              <tr key={t}><th scope="row">{t}</th><td className="num">{num(V1.action_success_pct_by_type[t])}</td><td className="num">{num(V2.action_success_pct_by_type?.[t])}</td></tr>
+              <tr key={t}><th scope="row">{sentence(t)}</th><td className="num">{kpiValue('pct', V1.action_success_pct_by_type[t])}</td><td className="num">{kpiValue('pct', V2.action_success_pct_by_type?.[t])}</td></tr>
             ))}
           </tbody>
         </table>
@@ -173,16 +188,16 @@ function Outcomes({ compare }) {
 
 function ModelMetrics({ m }) {
   const t = m.test, cm = t.confusion_matrix;
-  const rows = [['Random forest (selected)', t], ...Object.entries(m.baselines || {}).map(([k, b]) => [k === 'battery_rule' ? `Rule: ${b.rule}` : k.replace(/_/g, ' '), b])];
+  const rows = [['Random forest (selected)', t], ...Object.entries(m.baselines || {}).map(([k, b]) => [k === 'battery_rule' ? `Rule: ${b.rule}` : sentence(k), b])];
   return (
     <>
       <p className="lead">{m.target}. Split: {m.split.method} — {m.split.train_actions} train / {m.split.test_actions} test actions ({m.split.test_failures} test failures). Threshold {m.decision_threshold}.</p>
       <div className="stat-grid">
-        <Stat label="Precision" value={num(t.precision, 3)} />
-        <Stat label="Recall" value={num(t.recall, 3)} />
-        <Stat label="F1" value={num(t.f1, 3)} tone="accent" />
-        <Stat label="PR-AUC" value={num(t.pr_auc, 3)} />
-        <Stat label="ROC-AUC" value={num(t.roc_auc, 3)} />
+        <Stat label="Precision" value={num(t.precision, 3)} hint={GLOSSARY.precision} />
+        <Stat label="Recall" value={num(t.recall, 3)} hint={GLOSSARY.recall} />
+        <Stat label="F1" value={num(t.f1, 3)} tone="accent" hint={GLOSSARY.f1} />
+        <Stat label="PR-AUC" value={num(t.pr_auc, 3)} hint={GLOSSARY.pr_auc} />
+        <Stat label="ROC-AUC" value={num(t.roc_auc, 3)} hint={GLOSSARY.roc_auc} />
       </div>
       <div className="two-col">
         <div>
@@ -199,10 +214,10 @@ function ModelMetrics({ m }) {
           <h3>Cross-validation</h3>
           <p className="muted">{m.cross_validation.method}; selected by {m.cross_validation.selected_by}.</p>
           <table>
-            <thead><tr><th scope="col">Model</th><th scope="col" className="num">PR-AUC</th><th scope="col" className="num">F1</th></tr></thead>
+            <thead><tr><th scope="col">Model</th><th scope="col" className="num">PR-AUC<Hint text={GLOSSARY.pr_auc} label="What is PR-AUC?" /></th><th scope="col" className="num">F1<Hint text={GLOSSARY.f1} label="What is F1?" /></th></tr></thead>
             <tbody>
               {Object.entries(m.cross_validation.candidates).map(([k, c]) => (
-                <tr key={k}><th scope="row">{k.replace(/_/g, ' ')}{k === m.cross_validation.selected ? ' ★' : ''}</th>
+                <tr key={k}><th scope="row">{sentence(k)}{k === m.cross_validation.selected ? ' ★' : ''}</th>
                   <td className="num">{num(c.pr_auc_mean, 3)} ± {num(c.pr_auc_std, 3)}</td><td className="num">{num(c.f1_mean, 3)} ± {num(c.f1_std, 3)}</td></tr>
               ))}
             </tbody>
@@ -234,6 +249,7 @@ function ModelMetrics({ m }) {
 }
 
 export default function DataScientist() {
+  const { notify } = useApp();
   const [table, setTable] = useState('actions');
   const [busy, setBusy] = useState(false);
   const [pdfError, setPdfError] = useState('');
@@ -256,6 +272,7 @@ export default function DataScientist() {
         kpis: summary.data.kpis, compare: compare.data, metrics: metrics.data, waypoints: waypoints.data, ops: summary.data.ops,
         missions: missions.data, insights: insights.data, attention: summary.data.needs_attention,
       });
+      notify('PDF download started');
     } catch (e) {
       setPdfError(e.message);
     } finally {
@@ -275,6 +292,11 @@ export default function DataScientist() {
           {pdfError && <p className="note note-error" role="alert">{pdfError}</p>}
         </div>
       </header>
+      <nav className="jump-links" aria-label="Sections on this page">
+        {SECTIONS.map(([id, label]) => (
+          <a key={id} href={`#${id}`} onClick={e => { e.preventDefault(); scrollToEl(id); }}>{label}</a>
+        ))}
+      </nav>
 
       <Section eyebrow="Outcomes" title="Baseline (V1) vs improved (V2)" id="ds-compare">
         <Async state={compare}>{c => <Outcomes compare={c} />}</Async>

@@ -1,4 +1,4 @@
-import React, { useLayoutEffect, useRef, useState } from 'react';
+import React, { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { API_URL } from '../api.js';
 import { batteryLevel, num } from '../lib/format.js';
 
@@ -19,13 +19,61 @@ export function Section({ eyebrow, title, actions, children, className = '', id 
   );
 }
 
-export function Stat({ label, value, sub, tone }) {
-  return (
-    <div className={`stat${tone ? ` tone-${tone}` : ''}`}>
-      <span className="stat-label">{label}</span>
+/**
+ * A headline number. With onClick it becomes a shortcut (e.g. "Open issues" → the queue),
+ * shown with a small arrow; `action` is the screen-reader description of where it goes.
+ */
+export function Stat({ label, value, sub, tone, hint, onClick, action }) {
+  const cls = `stat${tone ? ` tone-${tone}` : ''}${onClick ? ' stat-link' : ''}`;
+  const body = (
+    <>
+      <span className="stat-label">{label}{hint && <Hint text={hint} />}{onClick && <span className="stat-go" aria-hidden="true">→</span>}</span>
       <strong className="stat-value">{value}</strong>
       {sub && <span className="stat-sub">{sub}</span>}
-    </div>
+      {onClick && action && <span className="sr-only">. {action}</span>}
+    </>
+  );
+  return onClick
+    ? <button type="button" className={cls} onClick={onClick}>{body}</button>
+    : <div className={cls}>{body}</div>;
+}
+
+/**
+ * Small "?" with a plain-language explanation on hover or focus. The tip is position: fixed so
+ * scrolling tables don't clip it; Escape dismisses it.
+ */
+export function Hint({ text, label = 'What does this mean?' }) {
+  const id = useId();
+  const btn = useRef(null);
+  const [pos, setPos] = useState(null);
+  const show = () => {
+    const r = btn.current?.getBoundingClientRect();
+    if (!r) return;
+    const left = Math.min(Math.max(12, r.left + r.width / 2 - 140), window.innerWidth - 292);
+    const below = r.bottom + 120 < window.innerHeight;
+    setPos({ left, top: below ? r.bottom + 8 : undefined, bottom: below ? undefined : window.innerHeight - r.top + 8 });
+  };
+  const hide = () => setPos(null);
+  useEffect(() => {
+    if (!pos) return undefined;
+    window.addEventListener('scroll', hide, true);
+    return () => window.removeEventListener('scroll', hide, true);
+  }, [pos]);
+  return (
+    <span className="hint" onMouseEnter={show} onMouseLeave={hide}>
+      <button
+        ref={btn}
+        type="button"
+        className="hint-btn"
+        aria-label={label}
+        aria-describedby={id}
+        onFocus={show}
+        onBlur={hide}
+        onClick={e => { e.stopPropagation(); pos ? hide() : show(); }}
+        onKeyDown={e => { if (e.key === 'Escape' && pos) { e.stopPropagation(); hide(); } }}
+      >?</button>
+      <span role="tooltip" id={id} className={`hint-tip${pos ? ' is-on' : ''}`} style={pos || undefined}>{text}</span>
+    </span>
   );
 }
 
@@ -48,6 +96,40 @@ export function FadeImg({ src, alt, className = '', ...rest }) {
       onError={show}
       {...rest}
     />
+  );
+}
+
+/** A thumbnail that opens the full, uncropped image in a viewer. Escape or ✕ closes it and focus returns to the thumbnail. */
+export function ZoomImg({ src, alt, ...rest }) {
+  const dialog = useRef(null);
+  const opener = useRef(null);
+  const [open, setOpen] = useState(false);
+  useEffect(() => { if (open && dialog.current && !dialog.current.open) dialog.current.showModal(); }, [open]);
+  const close = () => dialog.current?.close();
+  return (
+    <>
+      <button type="button" ref={opener} className="zoom-btn" onClick={() => setOpen(true)} aria-label={`Enlarge image: ${alt}`}>
+        <FadeImg src={src} alt={alt} {...rest} />
+        <span className="zoom-cue" aria-hidden="true">⤢</span>
+      </button>
+      {open && (
+        <dialog
+          ref={dialog}
+          className="lightbox"
+          aria-label={alt}
+          onClose={() => { setOpen(false); opener.current?.focus(); }}
+          onClick={e => { if (e.target === dialog.current) close(); }}
+          // Parents (e.g. the live alarm) may swallow Escape; handle it here first.
+          onKeyDown={e => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); } }}
+        >
+          <figure className="lightbox-figure">
+            <img src={src} alt={alt} />
+            <figcaption>{alt}</figcaption>
+          </figure>
+          <button type="button" className="icon-btn lightbox-close" onClick={close} aria-label="Close image">✕</button>
+        </dialog>
+      )}
+    </>
   );
 }
 
@@ -74,8 +156,9 @@ export function Battery({ pct, digits = 1 }) {
   );
 }
 
-export function Badge({ tone = 'muted', children }) {
-  return <span className={`badge tone-${tone}`}>{children}</span>;
+/** variant="status" is the quieter workflow-status look, so severity and danger keep the strong colour. */
+export function Badge({ tone = 'muted', variant, children }) {
+  return <span className={`badge tone-${tone}${variant ? ` badge-${variant}` : ''}`}>{children}</span>;
 }
 
 export function Segmented({ label, options, value, onChange }) {
@@ -93,8 +176,21 @@ export function Segmented({ label, options, value, onChange }) {
   );
 }
 
-/** Loading / error / empty states for a useApi() result. */
-export function Async({ state, children, empty = 'Nothing to show yet.' }) {
+/** A specific empty state with an optional next step. */
+export function Empty({ children, action }) {
+  return (
+    <div className="empty">
+      <p className="muted">{children}</p>
+      {action}
+    </div>
+  );
+}
+
+/**
+ * Loading / error / empty states for a useApi() result.
+ * refresh: also show a small "Updating…" cue while newer data loads, and flag kept data as possibly out of date if that fails.
+ */
+export function Async({ state, children, empty = 'Nothing to show yet.', refresh = false }) {
   if (state.error && !state.data) {
     return (
       <div className="note note-error" role="alert">
@@ -105,8 +201,20 @@ export function Async({ state, children, empty = 'Nothing to show yet.' }) {
     );
   }
   if (!state.data) return <div className="skeleton" aria-busy="true" aria-label="Loading" />;
-  if (Array.isArray(state.data) && !state.data.length) return <p className="muted">{empty}</p>;
-  return children(state.data);
+  if (Array.isArray(state.data) && !state.data.length) return typeof empty === 'string' ? <Empty>{empty}</Empty> : empty;
+  if (!refresh) return children(state.data);
+  return (
+    <>
+      {state.loading && <p className="refreshing" role="status">Updating…</p>}
+      {state.error && (
+        <p className="note note-warn" role="status">
+          Couldn’t refresh. Showing earlier data, which may be out of date.
+          {state.reload && <button type="button" className="btn btn-ghost btn-sm" onClick={state.reload}>Retry</button>}
+        </p>
+      )}
+      {children(state.data)}
+    </>
+  );
 }
 
 /** Horizontal bars for a {label: count} map. */
@@ -134,5 +242,48 @@ export function Field({ label, children, hint }) {
       {children}
       {hint && <span className="field-hint">{hint}</span>}
     </label>
+  );
+}
+
+/**
+ * Floating "back to top" button, stacked just above the assistant button. Appears once the page is scrolled
+ * about a screen down; returns to the top and moves focus to the start of the content for keyboard users.
+ */
+export function BackToTop() {
+  const [shown, setShown] = useState(false);
+  useEffect(() => {
+    let frame = 0;
+    const check = () => { frame = 0; setShown(window.scrollY > window.innerHeight * 0.8); };
+    const onScroll = () => { if (!frame) frame = requestAnimationFrame(check); };
+    check();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => { window.removeEventListener('scroll', onScroll); cancelAnimationFrame(frame); };
+  }, []);
+  function toTop() {
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    window.scrollTo({ top: 0, behavior: reduce ? 'auto' : 'smooth' });
+    document.getElementById('main')?.focus({ preventScroll: true });
+  }
+  return (
+    <button
+      type="button"
+      className={`to-top${shown ? ' is-shown' : ''}`}
+      onClick={toTop}
+      aria-label="Back to the top of the page"
+      title="Back to top"
+      tabIndex={shown ? 0 : -1}
+      aria-hidden={!shown}
+    >
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7" /></svg>
+    </button>
+  );
+}
+
+/** Brief success messages, bottom-left so they never cover the workspace or the assistant button. */
+export function Toasts({ items }) {
+  return (
+    <div className="toasts" role="status" aria-live="polite">
+      {items.map(t => <p key={t.id} className="toast"><span aria-hidden="true">✓</span> {t.text}</p>)}
+    </div>
   );
 }

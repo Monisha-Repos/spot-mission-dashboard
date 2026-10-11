@@ -1,12 +1,15 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { api, asset, useApi, useApp } from '../../api.js';
-import { Async, Badge, FadeImg, Field, Section, Segmented, Stat } from '../../components/ui.jsx';
+import { Async, Badge, Empty, Field, Section, Segmented, Stat, ZoomImg } from '../../components/ui.jsx';
 import LineChart from '../../components/LineChart.jsx';
 import LoginForm from './LoginForm.jsx';
 import { downloadReport } from '../../lib/report.js';
-import { formatTime, kpiLabel, nextStatuses, num, reading, severityTone, titleCase } from '../../lib/format.js';
+import { GLOSSARY, deltaArrow, formatTime, kpiDelta, kpiLabel, kpiValue, nextStatuses, num, reading, severityTone, titleCase } from '../../lib/format.js';
 
-const STATUS_TONE = { OPEN: 'bad', ACKNOWLEDGED: 'warn', IN_PROGRESS: 'warn', RESOLVED: 'ok', FALSE_ALARM: 'muted' };
+// Workflow status is shown quietly (badge variant "status"); red stays reserved for severity and danger.
+const STATUS_TONE = { OPEN: 'info', ACKNOWLEDGED: 'warn', IN_PROGRESS: 'warn', RESOLVED: 'ok', FALSE_ALARM: 'muted' };
+const CLOSED = ['RESOLVED', 'FALSE_ALARM'];
+const DEFAULT_FILTERS = { status: '', severity: '', location: '', open_only: 'true' };
 
 /** Run a signed-in write; a rejected token signs the user out so the form shows again. */
 function useWrite() {
@@ -24,7 +27,7 @@ function useWrite() {
 }
 
 function IssueDetail({ id }) {
-  const { session } = useApp();
+  const { session, notify } = useApp();
   const write = useWrite();
   const state = useApi(`/ops/issues/${id}`);
   const [status, setStatus] = useState('');
@@ -43,6 +46,7 @@ function IssueDetail({ id }) {
     if (assignee !== (state.data.assignee || '')) body.assignee = assignee;
     try {
       await write(`/ops/issues/${id}`, 'PATCH', body);
+      notify(status ? `Issue marked ${titleCase(status)}` : 'Note saved');
       setNote('');
       setStatus('');
     } catch (err) {
@@ -52,29 +56,36 @@ function IssueDetail({ id }) {
     }
   }
 
+  // While another issue loads, the previous one stays dimmed so it isn't mistaken for the new selection.
+  const stale = state.data && state.data.issue_id !== id;
   return (
-    <Async state={state}>
+    <Async state={state} refresh>
       {i => {
         const options = nextStatuses(i.status, session?.role);
         return (
-          <article className="issue-detail" aria-label={`Issue ${i.issue_id}`}>
+          <article className={`issue-detail${stale ? ' is-stale' : ''}`} aria-label={`Issue ${i.issue_id}`} aria-busy={stale || undefined}>
             <p className="eyebrow">{i.issue_id} · {titleCase(i.source_type)} {i.source_id}</p>
             <h3>{i.title}</h3>
             <p className="badges">
-              <Badge tone={STATUS_TONE[i.status]}>{titleCase(i.status)}</Badge>
               <Badge tone={severityTone(i.severity)}>{i.severity}</Badge>
               {i.danger && <Badge tone="bad">Danger</Badge>}
               {i.pending_decision && <Badge tone="bad">Alarm waiting</Badge>}
+              <Badge tone={STATUS_TONE[i.status]} variant="status">{titleCase(i.status)}</Badge>
               <span className="muted">{i.mission_id} · {i.location_id} {i.location_name} · Floor {i.floor} · {i.asset_name} ({i.asset_criticality})</span>
             </p>
             <p>{i.explanation}</p>
             {i.recommended_action && <p className="next-step">Next step: {i.recommended_action}</p>}
             <div className="stat-row">
               <Stat label="Reading" value={reading(i.reading)} sub={i.reading?.usual_range ? `usual ${num(i.reading.usual_range.low)}–${num(i.reading.usual_range.high)}` : i.reading?.quality} />
-              <Stat label="Predicted risk" value={num(i.predicted_failure_risk, 2)} />
+              <Stat label="Predicted risk" value={num(i.predicted_failure_risk, 2)} hint={GLOSSARY.predicted_failure_risk} />
               <Stat label="Assignee" value={i.assignee || '—'} />
             </div>
-            {i.evidence_image && <figure className="evidence evidence-sm"><FadeImg src={asset(i.evidence_image)} alt="Reference inspection image" loading="lazy" /><figcaption>Reference image</figcaption></figure>}
+            {i.evidence_image && (
+              <figure className="evidence evidence-sm">
+                <ZoomImg src={asset(i.evidence_image)} alt="Reference inspection image" loading="lazy" />
+                <figcaption>Reference image · click to enlarge</figcaption>
+              </figure>
+            )}
 
             {session ? (
               <form className="issue-form" onSubmit={submit}>
@@ -82,7 +93,7 @@ function IssueDetail({ id }) {
                   <Field label="Change status">
                     <select value={status} onChange={e => setStatus(e.target.value)}>
                       <option value="">Keep {titleCase(i.status)}</option>
-                      {options.map(s => <option key={s} value={s}>{s === 'OPEN' && (i.status === 'RESOLVED' || i.status === 'FALSE_ALARM') ? 'Reopen' : titleCase(s)}</option>)}
+                      {options.map(s => <option key={s} value={s}>{s === 'OPEN' && CLOSED.includes(i.status) ? 'Reopen' : titleCase(s)}</option>)}
                     </select>
                   </Field>
                   <Field label="Assignee"><input value={assignee} onChange={e => setAssignee(e.target.value)} maxLength={60} placeholder="Optional" /></Field>
@@ -114,33 +125,57 @@ function IssueDetail({ id }) {
 }
 
 function Issues() {
-  const [filters, setFilters] = useState({ status: '', severity: '', location: '', open_only: 'true' });
+  const [filters, setFilters] = useState(DEFAULT_FILTERS);
+  const [notice, setNotice] = useState('');
   const [selected, setSelected] = useState(null);
   const qs = new URLSearchParams(Object.entries(filters).filter(([, v]) => v)).toString();
   const issues = useApi(`/ops/issues?${qs}`);
-  const set = (k, v) => setFilters(f => ({ ...f, [k]: v }));
   const locations = useMemo(() => [...new Set((issues.data || []).map(i => i.location_id))].sort(), [issues.data]);
+  const active = Object.keys(DEFAULT_FILTERS).filter(k => filters[k] !== DEFAULT_FILTERS[k]).length;
+
+  // Keep the filters from contradicting each other: a closed status and "Open only" can't both apply.
+  function set(k, v) {
+    const next = { ...filters, [k]: v };
+    let message = '';
+    if (k === 'status' && CLOSED.includes(v) && filters.open_only) {
+      next.open_only = '';
+      message = `Showing ${titleCase(v).toLowerCase()} issues, so “Open only” was turned off.`;
+    } else if (k === 'open_only' && v && CLOSED.includes(filters.status)) {
+      next.status = '';
+      message = '“Open only” is on, so the closed status filter was cleared.';
+    }
+    setFilters(next);
+    setNotice(message);
+  }
+  const clear = () => { setFilters(DEFAULT_FILTERS); setNotice(''); };
 
   return (
     <div className="queue-layout">
       <div>
         <div className="table-tools">
-          <select value={filters.status} onChange={e => set('status', e.target.value)} aria-label="Status">
+          <select className={filters.status ? 'is-active' : undefined} value={filters.status} onChange={e => set('status', e.target.value)} aria-label="Status">
             <option value="">Status: any</option>
             {Object.keys(STATUS_TONE).map(s => <option key={s} value={s}>{titleCase(s)}</option>)}
           </select>
-          <select value={filters.severity} onChange={e => set('severity', e.target.value)} aria-label="Severity">
+          <select className={filters.severity ? 'is-active' : undefined} value={filters.severity} onChange={e => set('severity', e.target.value)} aria-label="Severity">
             <option value="">Severity: any</option>
             {['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'].map(s => <option key={s}>{s}</option>)}
           </select>
-          <select value={filters.location} onChange={e => set('location', e.target.value)} aria-label="Waypoint">
+          <select className={filters.location ? 'is-active' : undefined} value={filters.location} onChange={e => set('location', e.target.value)} aria-label="Waypoint">
             <option value="">Waypoint: any</option>
             {(filters.location && !locations.includes(filters.location) ? [filters.location, ...locations] : locations).map(l => <option key={l}>{l}</option>)}
           </select>
           <label className="check"><input type="checkbox" checked={filters.open_only === 'true'} onChange={e => set('open_only', e.target.checked ? 'true' : '')} /> Open only</label>
-          <span className="muted table-count">{issues.data?.length ?? 0} issues</span>
+          {active > 0 && <button type="button" className="btn btn-ghost btn-sm" onClick={clear}>Clear filters ({active})</button>}
+          <span className="muted table-count">{issues.data?.length ?? 0} issues{active > 0 && <span className="filtered-tag"> · filtered</span>}</span>
         </div>
-        <Async state={issues} empty="No issues match these filters.">
+        {notice && <p className="filter-note muted" role="status">{notice}</p>}
+        <Async
+          state={issues}
+          empty={active
+            ? <Empty action={<button type="button" className="btn btn-ghost btn-sm" onClick={clear}>Clear filters</button>}>No issues match these filters.</Empty>
+            : <Empty>No open issues. All clear for now.</Empty>}
+        >
           {list => (
             <ul className="queue">
               {list.map(i => (
@@ -148,9 +183,9 @@ function Issues() {
                   <button type="button" className={`queue-item${selected === i.issue_id ? ' is-selected' : ''}${i.danger ? ' is-danger' : ''}`} onClick={() => setSelected(i.issue_id)} aria-pressed={selected === i.issue_id}>
                     <span className="queue-badges">
                       <Badge tone={severityTone(i.severity)}>{i.severity}</Badge>
-                      <Badge tone={STATUS_TONE[i.status]}>{titleCase(i.status)}</Badge>
                       {i.danger && <Badge tone="bad">Danger</Badge>}
                       {i.pending_decision && <Badge tone="bad">Alarm</Badge>}
+                      <Badge tone={STATUS_TONE[i.status]} variant="status">{titleCase(i.status)}</Badge>
                     </span>
                     <strong>{i.title}</strong>
                     <span className="muted">{i.issue_id} · {i.mission_id} · {i.location_id} · {i.asset_id} ({i.asset_criticality}){i.assignee ? ` · ${i.assignee}` : ''}</span>
@@ -172,44 +207,63 @@ const CHART_KPIS = [
 ];
 
 function Snapshots() {
-  const { session } = useApp();
+  const { session, notify } = useApp();
   const write = useWrite();
   const list = useApi('/ops/snapshots');
   const [kpi, setKpi] = useState('action_success_pct');
   const [label, setLabel] = useState('');
   const [note, setNote] = useState('');
   const [saveError, setSaveError] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [pdfBusy, setPdfBusy] = useState(null);
+  const [pdfError, setPdfError] = useState('');
   const [cmp, setCmp] = useState({ a: '', b: '', scope_a: 'all', scope_b: 'all' });
   const snaps = list.data || [];
   useEffect(() => {
     if (snaps.length >= 2 && !cmp.a) setCmp(c => ({ ...c, a: String(snaps[0].snapshot_id), b: String(snaps[snaps.length - 1].snapshot_id) }));
-  }, [snaps.length]);
+  }, [snaps.length]); // eslint-disable-line react-hooks/exhaustive-deps
   const compare = useApi(cmp.a && cmp.b ? `/ops/snapshots/compare?${new URLSearchParams(cmp)}` : null);
 
   async function save(e) {
     e.preventDefault();
     setSaveError('');
+    setSaving(true);
     try {
       await write('/ops/snapshots', 'POST', { label, note: note || null });
+      notify('Snapshot saved');
       setLabel('');
       setNote('');
     } catch (err) {
       setSaveError(err.message);
+    } finally {
+      setSaving(false);
     }
   }
   async function exportPdf(id) {
-    const s = await api(`/ops/snapshots/${id}`);
-    await downloadReport({
-      kind: 'snapshot', title: `Snapshot: ${s.label}`,
-      subtitle: `Saved by ${s.created_by} on ${formatTime(s.created_at)}. Covers ${s.missions} missions, data up to ${formatTime(s.as_of || s.created_at)}.`,
-      note: s.note, asOf: s.as_of || s.created_at, kpis: s.kpis, ops: s.kpis.all?.ops,
-    });
+    setPdfBusy(id);
+    setPdfError('');
+    try {
+      const s = await api(`/ops/snapshots/${id}`);
+      await downloadReport({
+        kind: 'snapshot', title: `Snapshot: ${s.label}`,
+        subtitle: `Saved by ${s.created_by} on ${formatTime(s.created_at)}. Covers ${s.missions} missions, data up to ${formatTime(s.as_of || s.created_at)}.`,
+        note: s.note, asOf: s.as_of || s.created_at, kpis: s.kpis, ops: s.kpis.all?.ops,
+      });
+      notify('PDF download started');
+    } catch (err) {
+      setPdfError(`Couldn’t build the PDF: ${err.message}`);
+    } finally {
+      setPdfBusy(null);
+    }
   }
 
   const unit = CHART_KPIS.find(([k]) => k === kpi)[1];
   return (
     <>
-      <Async state={list} empty="No snapshots yet.">
+      <Async
+        state={list}
+        empty={<Empty>No snapshots yet. {session ? 'Save the first one below to start tracking KPIs over time.' : 'Sign in to save the first one and start tracking KPIs over time.'}</Empty>}
+      >
         {() => (
           <>
             <div className="chart-head">
@@ -221,7 +275,8 @@ function Snapshots() {
             <LineChart
               title={`${kpiLabel(kpi)} across snapshots`}
               labels={snaps.map(s => `#${s.snapshot_id}`)}
-              format={v => `${v}${unit}`}
+              details={snaps.map(s => ({ name: `#${s.snapshot_id} ${s.label}`, date: formatTime(s.as_of || s.created_at) }))}
+              format={v => `${num(v)}${unit}`}
               series={[
                 { name: 'All', tone: 'accent', values: snaps.map(s => s.headline?.all?.[kpi] ?? null) },
                 { name: 'V1 baseline', tone: 'muted', values: snaps.map(s => s.headline?.V1?.[kpi] ?? null) },
@@ -237,68 +292,84 @@ function Snapshots() {
           <div className="form-row">
             <Field label="Snapshot label"><input value={label} onChange={e => setLabel(e.target.value)} required maxLength={120} placeholder="e.g. After WP05 fix" /></Field>
             <Field label="Note"><input value={note} onChange={e => setNote(e.target.value)} maxLength={1000} placeholder="Optional" /></Field>
-            <button type="submit" className="btn btn-accent">Save snapshot</button>
+            <button type="submit" className="btn btn-accent" disabled={saving || !label.trim()}>{saving ? 'Saving…' : 'Save snapshot'}</button>
           </div>
           {saveError && <p className="note note-error" role="alert">{saveError}</p>}
         </form>
       ) : <p className="muted">Sign in to save a snapshot.</p>}
 
       <h3>Compare two snapshots</h3>
-      <div className="form-row compare-pick">
-        {['a', 'b'].map(side => (
-          <React.Fragment key={side}>
-            <Field label={side === 'a' ? 'Before' : 'After'}>
-              <select value={cmp[side]} onChange={e => setCmp(c => ({ ...c, [side]: e.target.value }))}>
-                <option value="">Pick a snapshot</option>
-                {snaps.map(s => <option key={s.snapshot_id} value={s.snapshot_id}>#{s.snapshot_id} {s.label}</option>)}
-              </select>
-            </Field>
-            <Field label="Scope">
-              <select value={cmp[`scope_${side}`]} onChange={e => setCmp(c => ({ ...c, [`scope_${side}`]: e.target.value }))}>
-                <option value="all">All</option><option value="V1">V1</option><option value="V2">V2</option>
-              </select>
-            </Field>
-          </React.Fragment>
-        ))}
-      </div>
+      {snaps.length < 2 ? <Empty>Comparing needs at least two snapshots.</Empty> : (
+        <div className="form-row compare-pick">
+          {['a', 'b'].map(side => (
+            <React.Fragment key={side}>
+              <Field label={side === 'a' ? 'Before' : 'After'}>
+                <select value={cmp[side]} onChange={e => setCmp(c => ({ ...c, [side]: e.target.value }))}>
+                  <option value="">Pick a snapshot</option>
+                  {snaps.map(s => <option key={s.snapshot_id} value={s.snapshot_id}>#{s.snapshot_id} {s.label}</option>)}
+                </select>
+              </Field>
+              <Field label="Scope">
+                <select value={cmp[`scope_${side}`]} onChange={e => setCmp(c => ({ ...c, [`scope_${side}`]: e.target.value }))}>
+                  <option value="all">All</option><option value="V1">V1</option><option value="V2">V2</option>
+                </select>
+              </Field>
+            </React.Fragment>
+          ))}
+        </div>
+      )}
       {compare.data || compare.error ? (
         <Async state={compare}>
-          {c => (
-            <>
-              <p className="lead"><span className="tone-ok">▲ {c.improved} improved</span> · <span className="tone-bad">▼ {c.degraded} degraded</span></p>
-              <div className="table-scroll">
-                <table>
-                  <thead><tr><th scope="col">KPI</th><th scope="col" className="num">#{c.a.snapshot_id} {c.a.scope}</th><th scope="col" className="num">#{c.b.snapshot_id} {c.b.scope}</th><th scope="col" className="num">Change</th></tr></thead>
-                  <tbody>
-                    {c.changes.filter(ch => ch.verdict !== 'unchanged').map(ch => (
-                      <tr key={ch.kpi}>
-                        <th scope="row">{kpiLabel(ch.kpi)}</th>
-                        <td className="num">{num(ch.a)}</td>
-                        <td className="num">{num(ch.b)}</td>
-                        <td className={`num delta ${ch.verdict === 'improved' ? 'tone-ok' : ch.verdict === 'degraded' ? 'tone-bad' : ''}`}>
-                          {ch.verdict === 'improved' ? '▲ ' : ch.verdict === 'degraded' ? '▼ ' : ''}{ch.delta > 0 ? '+' : ''}{num(ch.delta)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </>
-          )}
+          {c => {
+            const rows = c.changes.filter(ch => ch.verdict !== 'unchanged');
+            return (
+              <>
+                <p className="lead"><span className="tone-ok">{c.improved} improved</span> · <span className="tone-bad">{c.degraded} worse</span></p>
+                {rows.length ? (
+                  <>
+                    <div className="table-scroll">
+                      <table>
+                        <thead><tr><th scope="col">KPI</th><th scope="col" className="num">#{c.a.snapshot_id} {c.a.scope}</th><th scope="col" className="num">#{c.b.snapshot_id} {c.b.scope}</th><th scope="col" className="num">Change</th></tr></thead>
+                        <tbody>
+                          {rows.map(ch => (
+                            <tr key={ch.kpi}>
+                              <th scope="row">{kpiLabel(ch.kpi)}</th>
+                              <td className="num">{kpiValue(ch.kpi, ch.a)}</td>
+                              <td className="num">{kpiValue(ch.kpi, ch.b)}</td>
+                              <td className={`num delta ${ch.verdict === 'improved' ? 'tone-ok' : ch.verdict === 'degraded' ? 'tone-bad' : ''}`}>
+                                {ch.verdict === 'improved' || ch.verdict === 'degraded' ? <span className="verdict">{ch.verdict === 'improved' ? 'Improved' : 'Worse'}</span> : null}
+                                <span aria-hidden="true">{deltaArrow(ch.delta)}</span> {kpiDelta(ch.kpi, ch.delta)}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    <p className="table-note muted">▲ / ▼ show which way the number moved; the word says whether that is better. Percentages change in percentage points (pp).</p>
+                  </>
+                ) : <Empty>These two snapshots have the same numbers.</Empty>}
+              </>
+            );
+          }}
         </Async>
       ) : null}
 
       <h3>Timeline</h3>
-      <ol className="timeline">
-        {[...snaps].reverse().map(s => (
-          <li key={s.snapshot_id}>
-            <span className="timeline-when">#{s.snapshot_id} · {formatTime(s.as_of || s.created_at)}</span>
-            <span><strong>{s.label}</strong> · {s.created_by}{s.auto_seeded ? ' (auto)' : ''} · {s.missions} missions · success {num(s.headline?.all?.action_success_pct)}%</span>
-            {s.note && <span className="muted">{s.note}</span>}
-            <button type="button" className="btn btn-ghost btn-sm" onClick={() => exportPdf(s.snapshot_id)}>PDF</button>
-          </li>
-        ))}
-      </ol>
+      {pdfError && <p className="note note-error" role="alert">{pdfError}</p>}
+      {snaps.length ? (
+        <ol className="timeline">
+          {[...snaps].reverse().map(s => (
+            <li key={s.snapshot_id}>
+              <span className="timeline-when">#{s.snapshot_id} · {formatTime(s.as_of || s.created_at)}</span>
+              <span><strong>{s.label}</strong> · {s.created_by}{s.auto_seeded ? ' (auto)' : ''} · {s.missions} missions · success {num(s.headline?.all?.action_success_pct)}%</span>
+              {s.note && <span className="muted">{s.note}</span>}
+              <button type="button" className="btn btn-ghost btn-sm" disabled={pdfBusy !== null} onClick={() => exportPdf(s.snapshot_id)}>
+                {pdfBusy === s.snapshot_id ? 'Building PDF…' : 'PDF'}
+              </button>
+            </li>
+          ))}
+        </ol>
+      ) : <Empty>Saved snapshots will be listed here.</Empty>}
     </>
   );
 }
@@ -310,26 +381,49 @@ function Activity() {
       {a => (
         <>
           <p className="lead">{a.summary}</p>
-          <ol className="timeline">
-            {a.events.map(ev => (
-              <li key={ev.event_id}>
-                <span className="timeline-when">{formatTime(ev.at)}</span>
-                <span><strong>{ev.issue_id}</strong> {ev.from_status ? `${titleCase(ev.from_status)} → ${titleCase(ev.to_status)}` : titleCase(ev.kind)} · {ev.actor} · {ev.asset_id} @ {ev.location_id}</span>
-                <span className="muted">{ev.title}{ev.note ? ` — ${ev.note}` : ''}</span>
-              </li>
-            ))}
-          </ol>
+          {a.events.length ? (
+            <ol className="timeline">
+              {a.events.map(ev => (
+                <li key={ev.event_id}>
+                  <span className="timeline-when">{formatTime(ev.at)}</span>
+                  <span><strong>{ev.issue_id}</strong> {ev.from_status ? `${titleCase(ev.from_status)} → ${titleCase(ev.to_status)}` : titleCase(ev.kind)} · {ev.actor} · {ev.asset_id} @ {ev.location_id}</span>
+                  <span className="muted">{ev.title}{ev.note ? ` — ${ev.note}` : ''}</span>
+                </li>
+              ))}
+            </ol>
+          ) : <Empty>No activity yet. Changes to issues and alarm decisions appear here.</Empty>}
         </>
       )}
     </Async>
   );
 }
 
+/** One slim line for visitors; the form only opens when someone actually wants to sign in. */
+function SignInBar() {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className={`signin-bar${open ? ' is-open' : ''}`}>
+      <div className="signin-row">
+        <p><strong>Viewing is open to everyone.</strong> <span className="muted">Sign in to change issues, decide on alarms or save snapshots.</span></p>
+        <button type="button" className={`btn btn-sm ${open ? 'btn-ghost' : 'btn-accent'}`} aria-expanded={open} aria-controls="signin-form" onClick={() => setOpen(o => !o)}>
+          {open ? 'Cancel' : 'Sign in'}
+        </button>
+      </div>
+      {open && <div id="signin-form"><LoginForm compact /></div>}
+    </div>
+  );
+}
+
 export default function OpsConsole() {
-  const { session, setSession } = useApp();
+  const { session, setSession, notify } = useApp();
   const [view, setView] = useState('issues');
   const health = useApi('/health');
   const kpis = useApi('/ops/kpis');
+  const [wasSignedIn, setWasSignedIn] = useState(Boolean(session));
+  useEffect(() => {
+    if (session && !wasSignedIn) notify(`Signed in as ${session.name}`);
+    setWasSignedIn(Boolean(session));
+  }, [session]); // eslint-disable-line react-hooks/exhaustive-deps
   if (health.data && !health.data.ops_enabled) {
     return <Section title="Operator console is off"><p className="muted">Set <code>OPS_ENABLED=true</code> in <code>backend/.env</code> and restart the backend.</p></Section>;
   }
@@ -348,7 +442,7 @@ export default function OpsConsole() {
           </div>
         )}
       </header>
-      {!session && <Section eyebrow="Sign in" title="Operator sign-in"><LoginForm /></Section>}
+      {!session && <SignInBar />}
       {o && (
         <div className="stat-grid">
           <Stat label="Open issues" value={o.open_issues} sub={`${o.issues} total`} tone={o.open_issues ? 'warn' : 'ok'} />

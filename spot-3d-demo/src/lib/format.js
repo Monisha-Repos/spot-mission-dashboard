@@ -53,6 +53,49 @@ export function batteryLevel(value) {
   return n <= 30 ? 'low' : n <= 60 ? 'mid' : 'high';
 }
 
+/** "ACOUSTIC_INSPECTION" → "Acoustic inspection". Leaves blanks blank. */
+export function sentence(code) {
+  const h = humanize(code);
+  return h ? h.charAt(0).toUpperCase() + h.slice(1) : '';
+}
+
+/** Unit of a KPI key from the compare endpoints: '%' for percentages, ' min' for durations, '' otherwise. */
+export function kpiUnit(key) {
+  const head = String(key).split('.')[0];
+  if (/(^|_)pct($|_)/.test(head)) return '%';
+  if (head.endsWith('_min')) return ' min';
+  return '';
+}
+
+/** A KPI value with its unit, e.g. 77.2%. */
+export const kpiValue = (key, v) => (v === null || v === undefined ? '—' : `${num(v)}${kpiUnit(key)}`);
+
+/** A KPI change with sign and unit. Percentages change by percentage points (pp), not percent. */
+export function kpiDelta(key, d) {
+  if (d === null || d === undefined || Number.isNaN(Number(d))) return '—';
+  const u = kpiUnit(key);
+  const sign = d > 0 ? '+' : d < 0 ? '−' : '';
+  return `${sign}${num(Math.abs(d))}${u === '%' ? ' pp' : u}`;
+}
+
+/** Arrow for the actual direction of a change (up = went up), independent of whether that is good. */
+export const deltaArrow = d => (d > 0 ? '▲' : d < 0 ? '▼' : '•');
+
+/** Plain-language help for the technical terms shown in the dashboard. */
+export const GLOSSARY = {
+  predicted_failure_risk: 'Chance (0–1) the failure-risk model gives that this action fails. Higher means more likely to fail.',
+  avg_predicted_failure_risk: 'Average of the model’s failure chance (0–1) across actions. Lower is better.',
+  precision: 'Of the actions the model flagged as failing, the share that really failed.',
+  recall: 'Of the actions that really failed, the share the model caught.',
+  f1: 'Balance of precision and recall in one number (0–1). Higher is better.',
+  pr_auc: 'Area under the precision–recall curve (0–1): how well the model ranks failures above successes, focused on the rare failures.',
+  roc_auc: 'Area under the ROC curve (0–1): the chance a random failure gets a higher risk score than a random success. 0.5 is guessing.',
+  hidden_failure_missions: 'Missions marked completed even though at least one check failed during the run.',
+  p_value: 'How likely a difference this large is by chance alone. Below 0.05 is usually treated as a real difference.',
+  avg_battery_drain_pct: 'Average battery percentage used from start to end of a mission. Lower is better.',
+  pp: 'Percentage points: the plain difference between two percentages (e.g. 70% → 75% is +5 pp).',
+};
+
 /** Status of a waypoint / record → CSS tone. */
 export const tone = status => ({ normal: 'ok', watch: 'warn', action: 'bad' }[status] || 'muted');
 export const severityTone = s => ({ LOW: 'muted', MEDIUM: 'warn', HIGH: 'bad', CRITICAL: 'bad' }[s] || 'muted');
