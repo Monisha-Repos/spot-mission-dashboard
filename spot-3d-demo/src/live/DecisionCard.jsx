@@ -79,6 +79,7 @@ export default function DecisionCard() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [sound, setSound] = useState(soundOn);
+  const [blocked, setBlocked] = useState(false); // the browser hasn't allowed sound yet (no click on the page)
   const [, tick] = useState(0);
   const heard = useRef(new Set());
   const card = useRef(null);
@@ -101,7 +102,7 @@ export default function DecisionCard() {
     if (!fresh.length) return;
     fresh.forEach(a => heard.current.add(a.id));
     setOpen(true);
-    if (sound) chime();
+    if (sound) chime().then(ok => setBlocked(!ok));
   }, [queue, sound]);
   useEffect(() => { setWhy(null); setError(''); setDetails(false); }, [current?.id]);
   // Keep "2 min ago" fresh, and drop shared alarms someone decided in another tab.
@@ -122,10 +123,12 @@ export default function DecisionCard() {
   if (!current) return null;
 
   function toggleSound() {
+    // Blocked: this click is the permission the browser was waiting for, so play instead of switching off.
+    if (sound && blocked) { chime().then(ok => setBlocked(!ok)); return; }
     const next = !sound;
     setSound(next);
     try { localStorage.setItem(SOUND_KEY, next ? 'on' : 'off'); } catch { /* lasts this visit */ }
-    if (next) chime();
+    if (next) chime().then(ok => setBlocked(!ok));
   }
 
   async function decide(decision, note = '') {
@@ -178,7 +181,7 @@ export default function DecisionCard() {
         <span className="decision-tools">
           {count > 1 && <button type="button" className="link-btn" onClick={() => setIndex(i => (i + 1) % count)}>Next</button>}
           <button type="button" className="link-btn" onClick={toggleSound} aria-pressed={sound} title="Soft chime when a new decision arrives">
-            Sound {sound ? 'on' : 'off'}
+            {sound && blocked ? 'Tap to enable sound' : `Sound ${sound ? 'on' : 'off'}`}
           </button>
           <button type="button" className="link-btn" onClick={() => setOpen(false)}>Later</button>
         </span>
