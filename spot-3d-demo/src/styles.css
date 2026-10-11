@@ -1157,3 +1157,5 @@ body:has(.stream-bubble, .stream-dialog) .toasts { bottom: 96px; }
   background: color-mix(in srgb, var(--signal) 10%, var(--surface)); border-bottom: 1px solid color-mix(in srgb, var(--signal) 35%, var(--line)); }
 .sandbox-notice > span:nth-child(2) { flex: 1 1 320px; }
 .sandbox-notice-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--signal); flex: none; }
+/* Keep the notice's link clear of an open decision card (docked top right). */
+@media (min-width: 641px) { body:has(.decision) .sandbox-notice { padding-right: 470px; } }

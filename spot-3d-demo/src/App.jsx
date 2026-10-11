@@ -12,6 +12,7 @@ import { LiveProvider } from './live/LiveContext.jsx';
 import { LiveBadge, SandboxNotice } from './live/LiveViews.jsx';
 import DecisionCard from './live/DecisionCard.jsx';
 import StreamBubble from './live/StreamBubble.jsx';
+import { chime, useSound } from './lib/chime.js';
 
 const TABS = [['overview', 'Overview'], ['replay', 'Replay'], ['analysis', 'Data Analysis'], ['operator', 'Operator']];
 const PLAIN_TABS = ['overview', 'replay'];
@@ -50,6 +51,7 @@ export default function App() {
   const [context, setContext] = useState({ floor: 1 });
   const [replayMission, setReplayMission] = useState(null);
   const [toasts, setToasts] = useState([]);
+  const [sound, setSound] = useSound();
   const refreshed = useLastRefresh();
   const topbar = useRef(null);
 
@@ -142,6 +144,18 @@ export default function App() {
               <LiveBadge />
               {refreshed && <span className="refreshed" title="Last time data loaded from the backend">Data updated {clock(refreshed)}</span>}
             </span>
+            <button
+              type="button"
+              className="icon-btn sound-toggle"
+              onClick={() => { const next = !sound; setSound(next); if (next) chime(); }}
+              aria-pressed={sound}
+              aria-label={sound ? 'Turn decision sounds off' : 'Turn decision sounds on'}
+              title={sound ? 'Sound on: a soft chime when a decision is needed. Click to mute.' : 'Sound off. Click to turn the decision chime on.'}
+            >
+              {sound
+                ? <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" /><path d="M15.5 9a4.5 4.5 0 0 1 0 6M18 6.5a8 8 0 0 1 0 11" /></svg>
+                : <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" /><path d="M16 9.5l5 5M21 9.5l-5 5" /></svg>}
+            </button>
             <button
               type="button"
               className="icon-btn theme-toggle"

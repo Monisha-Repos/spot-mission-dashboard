@@ -3,7 +3,7 @@ import { api, asset, useApi, useApp } from '../api.js';
 import { FloorPlane } from '../components/InclinedMap.jsx';
 import LoginForm from '../modules/ops/LoginForm.jsx';
 import { humanize, measurementLabel, num, reading } from '../lib/format.js';
-import { chime } from '../lib/chime.js';
+import { chime, useSound } from '../lib/chime.js';
 import { useLive } from './LiveContext.jsx';
 
 /**
@@ -25,11 +25,6 @@ const HEADLINE = {
   SIGNAL_DEGRADATION: 'had a weak network signal nearby', NAVIGATION_OBSTRUCTION: 'has its path blocked',
   LOCALIZATION_ISSUE: 'is where Spot lost its position',
 };
-const SOUND_KEY = 'spot.chime';
-
-function soundOn() {
-  try { return localStorage.getItem(SOUND_KEY) !== 'off'; } catch { return true; }
-}
 
 function ago(ms) {
   const s = Math.max(0, Math.round((Date.now() - ms) / 1000));
@@ -78,7 +73,7 @@ export default function DecisionCard() {
   const [why, setWhy] = useState(null); // reason text while choosing "It's fine"
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const [sound, setSound] = useState(soundOn);
+  const [sound, setSound] = useSound();
   const [blocked, setBlocked] = useState(false); // the browser hasn't allowed sound yet (no click on the page)
   const [, tick] = useState(0);
   const heard = useRef(new Set());
@@ -127,7 +122,6 @@ export default function DecisionCard() {
     if (sound && blocked) { chime().then(ok => setBlocked(!ok)); return; }
     const next = !sound;
     setSound(next);
-    try { localStorage.setItem(SOUND_KEY, next ? 'on' : 'off'); } catch { /* lasts this visit */ }
     if (next) chime().then(ok => setBlocked(!ok));
   }
 

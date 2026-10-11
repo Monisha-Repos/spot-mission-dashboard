@@ -1,9 +1,27 @@
+import { useEffect, useState } from 'react';
+
 // A soft two-note chime for "a decision is waiting": noticeable without sounding like an error or a siren.
 //
 // Browsers keep audio suspended until the person interacts with the page, and a chime fires later from a timer, not
 // from a click. So the audio context is created and woken on the first click or key press anywhere, and chime()
 // waits for it to be running before scheduling the notes.
 let ctx = null;
+
+const SOUND_KEY = 'spot.chime';
+let soundOn = (() => { try { return localStorage.getItem(SOUND_KEY) !== 'off'; } catch { return true; } })();
+const listeners = new Set();
+
+/** Whether decision chimes are on (default yes). The top-bar button and the decision card share this. */
+export const isSoundOn = () => soundOn;
+export function setSoundOn(on) {
+  soundOn = on;
+  try { localStorage.setItem(SOUND_KEY, on ? 'on' : 'off'); } catch { /* lasts this visit */ }
+  listeners.forEach(fn => fn(on));
+}
+export function onSoundChange(fn) {
+  listeners.add(fn);
+  return () => listeners.delete(fn);
+}
 
 function context() {
   if (!ctx) {
@@ -51,4 +69,11 @@ export async function chime() {
   } catch {
     return false; // no Web Audio: the card still appears
   }
+}
+
+/** React hook: [on, setOn] for the shared sound setting. */
+export function useSound() {
+  const [on, setOn] = useState(soundOn);
+  useEffect(() => onSoundChange(setOn), []);
+  return [on, setSoundOn];
 }
