@@ -27,6 +27,7 @@
   --ok: #2fbf62;
   --warn: #f28c28;
   --bad: #ff4436;
+  --batt-mid: #e8d33a;        /* battery yellow: leans lemon so it doesn't read as the gold accent */
   --overlay: rgba(0, 0, 0, 0.7);
   --on-overlay: #ffffff;
   --grid-minor: rgba(255, 255, 255, 0.06);
@@ -56,6 +57,7 @@
   --ok: #1d8a42;
   --warn: #b85c00;
   --bad: #c8261b;
+  --batt-mid: #806c00;        /* darker yellow that passes contrast on white */
   --overlay: rgba(0, 0, 0, 0.7);
   --on-overlay: #ffffff;
   --grid-minor: rgba(0, 0, 0, 0.06);
@@ -226,6 +228,16 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 .bars-fill.tone-bad { background: var(--bad); }
 .bars-fill.tone-warn { background: var(--warn); }
 .bars-value { font-variant-numeric: tabular-nums; color: var(--muted); }
+
+/* Battery level: icon filled to the %, red ≤30, yellow ≤60, green above. */
+.batt-low { --batt: var(--bad); }
+.batt-mid { --batt: var(--batt-mid); }
+.batt-high { --batt: var(--ok); }
+.batt-none { --batt: var(--muted); }
+.batt { display: inline-flex; align-items: center; gap: .3em; color: var(--batt); white-space: nowrap; font-variant-numeric: tabular-nums; vertical-align: middle; }
+.batt-icon { width: 1.5em; height: .81em; flex: none; color: var(--batt); }
+.batt-shell { fill: none; stroke: currentColor; stroke-width: 1.5; }
+.batt-cap, .batt-fill { fill: currentColor; }
 
 /* ---------- overview hero + 3D stage ---------- */
 .hero { position: relative; }
@@ -517,7 +529,7 @@ tbody tr:hover { background: var(--surface); }
 .meter { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 12px; }
 .meter-label { font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
 .meter-track { height: 6px; background: var(--surface-3); }
-.meter-track span { display: block; height: 100%; background: var(--sev); }
+.meter-track span { display: block; height: 100%; background: var(--batt, var(--sev)); transition: background-color .3s; }
 .meter-value { min-width: 4ch; text-align: right; font-variant-numeric: tabular-nums; }
 
 /* transport */

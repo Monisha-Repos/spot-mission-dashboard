@@ -1,5 +1,6 @@
 import React from 'react';
 import { API_URL } from '../api.js';
+import { batteryLevel, num } from '../lib/format.js';
 
 export function Section({ eyebrow, title, actions, children, className = '', id }) {
   return (
@@ -25,6 +26,29 @@ export function Stat({ label, value, sub, tone }) {
       <strong className="stat-value">{value}</strong>
       {sub && <span className="stat-sub">{sub}</span>}
     </div>
+  );
+}
+
+/** Battery outline filled to `pct`. Decorative: pair it with the number as text. */
+export function BatteryIcon({ pct }) {
+  const fill = Math.max(0, Math.min(100, Number(pct) || 0));
+  return (
+    <svg className="batt-icon" viewBox="0 0 26 14" aria-hidden="true" focusable="false">
+      <rect className="batt-shell" x="0.75" y="0.75" width="21.5" height="12.5" />
+      <rect className="batt-cap" x="23" y="4.5" width="2.5" height="5" />
+      {fill > 0 && <rect className="batt-fill" x="2.5" y="2.5" width={(18 * fill) / 100} height="9" />}
+    </svg>
+  );
+}
+
+/** Battery icon + percentage, coloured by level (red ≤30%, yellow ≤60%, green above). */
+export function Battery({ pct, digits = 1 }) {
+  const level = batteryLevel(pct);
+  return (
+    <span className={`batt batt-${level}`}>
+      <BatteryIcon pct={pct} />
+      <span className="batt-value">{level === 'none' ? '—' : `${num(pct, digits)}%`}</span>
+    </span>
   );
 }
 
