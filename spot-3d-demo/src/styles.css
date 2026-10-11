@@ -1176,3 +1176,7 @@ body:has(.stream-bubble, .stream-dialog) .toasts { bottom: 96px; }
 /* Reset view: a quiet helper, not a main control. */
 .stage-controls .btn-ghost.stage-reset { background: transparent; border-color: transparent; color: var(--muted); padding-left: 10px; padding-right: 10px; }
 .stage-controls .btn-ghost.stage-reset:hover, .stage-controls .btn-ghost.stage-reset:focus-visible { background: transparent; border-color: var(--line-strong); color: var(--text); }
+
+/* Assistant: numbered references in answers, matching the numbered source list. */
+.cite-ref { margin-left: 2px; padding: 0 4px; font-size: 10px; line-height: 1; color: var(--signal); border: 1px solid color-mix(in srgb, var(--signal) 45%, transparent); vertical-align: super; cursor: help; }
+.cite-n { display: inline-grid; place-items: center; min-width: 18px; height: 18px; margin-right: 6px; font-size: 11px; color: var(--signal); border: 1px solid color-mix(in srgb, var(--signal) 45%, transparent); flex: none; }

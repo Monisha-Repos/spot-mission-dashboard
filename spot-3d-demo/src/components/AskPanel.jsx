@@ -16,20 +16,49 @@ function contextLabel(ctx) {
   return parts.join(' · ');
 }
 
+// Parts with a hotspot on the 3D model (SpotViewer's PART_ANCHORS); others (e.g. the radio) only have a details panel.
+const ROBOT_PARTS = new Set(['ptz_camera', 'thermal_camera', 'microphone', 'lidar', 'battery', 'legs_and_body_cameras']);
+// IDs people use on the floor (missions, anomalies, actions, readings, waypoints, assets). Internal document names
+// such as "insight-problem-asset" or "kpis-V2" are never shown.
+const PUBLIC_ID = /^(M\d{3}|AN\d{3}|A\d{4}|R\d{4}|WP\d{2}|[A-Z]{2,5}-\d{3})$/i;
+
 /** Where a cited source can be opened in the dashboard, if anywhere. */
 function citationTarget(c) {
   if (c.kind === 'mission') return { label: 'Open in Replay', tab: 'replay', opts: { mission: c.id } };
   if (c.kind === 'waypoint') return { label: 'Show on the map', tab: 'overview', opts: { waypoint: c.id, scrollTo: 'map' } };
-  if (c.kind === 'Spot part') return { label: 'Show on the robot', tab: 'overview', opts: { part: c.id, scrollTo: 'main' } };
+  if (c.kind === 'Spot part') {
+    return ROBOT_PARTS.has(c.id)
+      ? { label: 'Show on the robot', tab: 'overview', opts: { part: c.id, scrollTo: 'main' } }
+      : { label: 'Open part details', tab: 'overview', opts: { part: c.id, scrollTo: 'main' } };
+  }
   return null;
 }
 
-function Citation({ c, onOpen }) {
+/** The answer with its [ID] markers turned into numbered references to the source list below it. */
+function AnswerText({ text, citations }) {
+  const index = new Map((citations || []).map((c, i) => [c.id.toUpperCase(), i + 1]));
+  const out = [];
+  let last = 0;
+  for (const m of text.matchAll(/\s?\[([A-Za-z0-9_.:\-]+)\]/g)) {
+    out.push(text.slice(last, m.index));
+    const n = index.get(m[1].toUpperCase());
+    if (n) out.push(<sup key={m.index} className="cite-ref" title={citations[n - 1].title}>{n}</sup>);
+    last = m.index + m[0].length;
+  }
+  out.push(text.slice(last));
+  return <p>{out}</p>;
+}
+
+function Citation({ c, n, onOpen }) {
   const target = citationTarget(c);
   return (
     <li>
       <details className="cite">
-        <summary><code>{c.id}</code><span className="cite-title">{c.title}</span></summary>
+        <summary>
+          <span className="cite-n">{n}</span>
+          {PUBLIC_ID.test(c.id) && <code>{c.id}</code>}
+          <span className="cite-title">{c.title}</span>
+        </summary>
         <div className="cite-body">
           <p><span className="muted">{titleCase(c.kind)}</span> · {c.title}</p>
           {target && <button type="button" className="btn btn-ghost btn-sm" onClick={() => onOpen(target)}>{target.label}</button>}
@@ -112,13 +141,13 @@ export default function AskPanel({ mode, context }) {
             )}
             {messages.map((m, i) => (
               <div key={i} className={`msg msg-${m.role}${m.error ? ' msg-error' : ''}`}>
-                <p>{m.text}</p>
+                {m.role === 'ai' && !m.error ? <AnswerText text={m.text} citations={m.citations?.slice(0, 8)} /> : <p>{m.text}</p>}
                 {m.error && m.question && (
                   <button type="button" className="btn btn-ghost btn-sm msg-retry" disabled={busy} onClick={() => ask(m.question)}>Retry</button>
                 )}
                 {m.citations?.length > 0 && (
                   <ul className="citations" aria-label="Sources">
-                    {m.citations.slice(0, 8).map(c => <Citation key={c.id} c={c} onOpen={t => go(t.tab, t.opts)} />)}
+                    {m.citations.slice(0, 8).map((c, i) => <Citation key={c.id} c={c} n={i + 1} onOpen={t => go(t.tab, t.opts)} />)}
                   </ul>
                 )}
               </div>
