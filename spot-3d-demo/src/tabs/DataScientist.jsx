@@ -4,7 +4,7 @@ import { Async, Badge, Hint, Section, Segmented, Stat } from '../components/ui.j
 import DataTable from '../components/DataTable.jsx';
 import { downloadReport } from '../lib/report.js';
 import {
-  GLOSSARY, deltaArrow, formatTime, humanize, kpiDelta, kpiLabel, kpiValue, measurementLabel, num, sentence, severityTone, titleCase, tone,
+  GLOSSARY, deltaArrow, formatTime, humanize, kpiDelta, kpiLabel, kpiValue, measurementLabel, num, sentence, severityTone, tone,
 } from '../lib/format.js';
 import { scrollToEl } from '../lib/dom.js';
 
@@ -230,7 +230,7 @@ function Outcomes({ compare }) {
 
 function ModelMetrics({ m, links }) {
   const t = m.test, cm = t.confusion_matrix;
-  const rows = [[`${titleCase(m.model_type)} (selected)`, t], ...Object.entries(m.baselines || {}).map(([k, b]) => [k === 'battery_rule' ? `Rule: ${b.rule}` : sentence(k), b])];
+  const rows = [[`${sentence(m.model_type)} (selected)`, t], ...Object.entries(m.baselines || {}).map(([k, b]) => [k === 'battery_rule' ? `Rule: ${b.rule}` : sentence(k), b])];
   return (
     <>
       <p className="lead">{m.target}. Threshold {m.decision_threshold}.</p>

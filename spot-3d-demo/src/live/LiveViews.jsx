@@ -113,7 +113,7 @@ export function LivePanel() {
       <Section eyebrow="Live" title="Watch Spot work" id="live" className="live-section">
         <div className="live-cta">
           <p className="lead">Replay the nine IMPROVED (V2) missions as if Spot were sending them right now: every step, reading
-            and finding as it happens, with the AI's failure-risk estimate before each step and an alarm to answer.</p>
+            and finding as it happens, with the AI's failure-risk estimate before each step.</p>
           <div className="live-cta-actions">
             <Segmented label="Speed" options={speedOptions} value={speed} onChange={setSpeed} />
             <button type="button" className="btn btn-accent" onClick={startSandbox}>Try live demo</button>
@@ -179,7 +179,6 @@ export function PresenterControls() {
   const { session, setSession, bump } = useApp();
   const health = useApi('/health');
   const [speed, setSpeed] = useState('60');
-  const [pauseOnAlarm, setPauseOnAlarm] = useState(true);
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
   const p = live.presenter;
@@ -205,7 +204,7 @@ export function PresenterControls() {
   return (
     <Section eyebrow="Presenter" title="Live demo feed" id="ops-live">
       <p className="lead">Streams the nine IMPROVED (V2) missions through the Java ingest API to <strong>every open dashboard</strong>, event by event.
-        Missions are saved as they finish, alarms go to everyone, and the KPIs and snapshot history climb.</p>
+        Missions are saved as they finish, and the KPIs and snapshot history climb.</p>
       <p className="live-state">
         <Badge tone={STATE_TONE[state] || 'muted'}>{state === 'offline' ? 'Ingest API offline' : STATE_LABEL[state] || state}</Badge>{' '}
         {p?.message}{p?.mission_total ? ` · ${p.missions_saved} of ${p.mission_total} saved` : ''}
@@ -216,9 +215,8 @@ export function PresenterControls() {
           {!running && (
             <>
               <Segmented label="Speed" options={speedOptions} value={speed} onChange={setSpeed} />
-              <label className="check"><input type="checkbox" checked={pauseOnAlarm} onChange={e => setPauseOnAlarm(e.target.checked)} /> Pause on alarms</label>
               <button type="button" className="btn btn-accent btn-sm" disabled={Boolean(busy) || state === 'offline'}
-                onClick={() => call('start', { speed: Number(speed), pause_on_alarm: pauseOnAlarm })}>Start live feed</button>
+                onClick={() => call('start', { speed: Number(speed), pause_on_alarm: false })}>Start live feed</button>
             </>
           )}
           {running && (
@@ -232,12 +230,10 @@ export function PresenterControls() {
           {session.role === 'supervisor' && (
             <button type="button" className="btn btn-danger btn-sm" disabled={Boolean(busy) || state === 'offline'} onClick={() => call('reset')}>Reset to baseline</button>
           )}
-          <button type="button" className="btn btn-ghost btn-sm" onClick={() => live.testAlarm()}>Test alarm (this screen)</button>
         </div>
       )}
       {error && <p className="note note-error" role="alert">{error}</p>}
       <p className="muted">
-        {state === 'waiting_for_decision' && 'The feed carries on once every alarm has a decision. '}
         {usage ? `AI assistant: ${usage.model || usage.provider} · about $${num(usage.spent_usd, 3)} of $${num(usage.budget_usd, 2)} used this month (${usage.calls} paid answers).` : ''}
       </p>
     </Section>
