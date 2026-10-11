@@ -1029,3 +1029,125 @@ select.is-active { border-color: var(--info); }
   .live-grid { grid-template-columns: 1fr; }
   .ticker { max-height: 320px; }
 }
+
+/* ==========================================================================
+   Decision card: urgent but calm. Amber attention, a slow breathing glow, docked top right; never a red takeover.
+   ========================================================================== */
+.decision {
+  position: fixed; top: calc(var(--topbar-h, var(--top)) + 16px); right: 24px; z-index: 50;
+  width: min(420px, calc(100vw - 32px)); max-height: calc(100vh - var(--topbar-h, var(--top)) - 32px); overflow-y: auto;
+  padding: 18px 20px 20px; background: var(--surface); color: var(--text);
+  border: 1px solid var(--line); border-top: 3px solid var(--warn);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, .35); animation: decision-in .35s ease-out, decision-breathe 3.2s ease-in-out .35s infinite;
+}
+.decision:focus { outline: none; }
+@keyframes decision-in { from { opacity: 0; transform: translateY(-10px); } }
+@keyframes decision-breathe {
+  0%, 100% { box-shadow: 0 18px 48px rgba(0, 0, 0, .35), 0 0 0 0 color-mix(in srgb, var(--warn) 0%, transparent); }
+  50% { box-shadow: 0 18px 48px rgba(0, 0, 0, .35), 0 0 0 6px color-mix(in srgb, var(--warn) 22%, transparent); }
+}
+.decision-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+.decision-kicker { display: inline-flex; align-items: center; gap: 8px; font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--warn); }
+.decision-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--warn); flex: none; animation: blink 2.4s ease-in-out infinite; }
+.decision-tools { display: inline-flex; gap: 12px; }
+.link-btn { padding: 0; border: 0; background: none; color: var(--muted); font: inherit; font-size: 12px; letter-spacing: .04em; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+.link-btn:hover { color: var(--text); }
+.decision h2 { margin: 0 0 12px; font-size: 22px; line-height: 1.25; text-transform: none; letter-spacing: 0; font-weight: 500; }
+.decision-sev { display: inline-block; margin-right: 10px; padding: 2px 8px; vertical-align: 3px; font-size: 11px; letter-spacing: .12em; color: var(--warn); border: 1px solid var(--warn); }
+.decision.sev-critical .decision-sev { color: #000; background: var(--warn); }
+.decision-facts { display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px; margin: 0 0 10px; font-size: 14px; }
+.decision-facts dt { font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); padding-top: 2px; }
+.decision-facts dd { margin: 0; }
+.decision-detail { margin: 0 0 10px; font-size: 14px; color: var(--muted); }
+.decision-more { margin-bottom: 12px; }
+.decision-visuals { display: grid; gap: 12px; margin-bottom: 14px; }
+.decision-map { height: 150px; }
+.decision-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+.decision-actions .btn { flex: 1 1 140px; }
+.decision-why { display: grid; gap: 10px; }
+.decision-signin { display: grid; gap: 8px; }
+.decision-chip {
+  position: fixed; top: calc(var(--topbar-h, var(--top)) + 16px); right: 24px; z-index: 50;
+  display: inline-flex; align-items: center; gap: 10px; padding: 10px 16px; cursor: pointer;
+  background: var(--surface); color: var(--text); border: 1px solid var(--warn); font: inherit; font-size: 13px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .3); animation: decision-in .3s ease-out;
+}
+
+/* ==========================================================================
+   Stream bubble + dialog: the live data stream, illustrated.
+   ========================================================================== */
+.stream-bubble {
+  position: fixed; left: 24px; bottom: 24px; z-index: 40; display: inline-flex; align-items: center; gap: 12px;
+  padding: 8px 18px 8px 8px; border-radius: 999px; cursor: pointer; font: inherit; color: var(--text);
+  background: var(--surface); border: 1px solid color-mix(in srgb, var(--signal) 45%, var(--line));
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .35); animation: decision-in .3s ease-out;
+}
+.stream-bubble:hover { border-color: var(--signal); }
+.stream-bubble.is-waiting { border-color: var(--warn); }
+.stream-ring { position: relative; width: 48px; height: 48px; flex: none; }
+.stream-ring svg { width: 48px; height: 48px; transform: rotate(-90deg); }
+.ring-track { fill: none; stroke: var(--surface-3); stroke-width: 3; }
+.ring-fill { fill: none; stroke: var(--signal); stroke-width: 3; stroke-linecap: round; transition: stroke-dashoffset .5s ease; }
+.stream-bubble.is-waiting .ring-fill { stroke: var(--warn); }
+.stream-core { position: absolute; inset: 17px; border-radius: 50%; background: var(--signal); }
+.stream-bubble.is-waiting .stream-core { background: var(--warn); }
+.stream-ping { position: absolute; inset: 17px; border-radius: 50%; background: var(--signal-halo); animation: stream-ping 1.4s ease-out; }
+@keyframes stream-ping { from { transform: scale(1); opacity: .9; } to { transform: scale(3); opacity: 0; } }
+.stream-label { display: grid; text-align: left; line-height: 1.3; }
+.stream-label strong { font-size: 13px; letter-spacing: .08em; text-transform: uppercase; font-weight: 500; }
+.stream-label span { font-size: 12px; color: var(--muted); }
+/* Toasts move up while the bubble is showing. */
+body:has(.stream-bubble, .stream-dialog) .toasts { bottom: 96px; }
+
+.stream-dialog {
+  position: fixed; left: 24px; bottom: 24px; z-index: 40; width: min(400px, calc(100vw - 32px));
+  max-height: calc(100vh - var(--topbar-h, var(--top)) - 40px); overflow-y: auto;
+  padding: 16px 18px 18px; background: var(--surface); color: var(--text);
+  border: 1px solid var(--line); border-top: 3px solid var(--signal); box-shadow: 0 18px 48px rgba(0, 0, 0, .4);
+  animation: decision-in .3s ease-out;
+}
+.stream-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.stream-head .eyebrow { color: var(--signal); margin-bottom: 4px; }
+.stream-head h2 { margin: 0; font-size: 18px; letter-spacing: .02em; text-transform: none; font-weight: 500; }
+
+.pipe { position: relative; display: grid; gap: 4px; margin: 18px 0 16px; padding-top: 4px; }
+.pipe-2 { grid-template-columns: repeat(2, 1fr); }
+.pipe-4 { grid-template-columns: repeat(4, 1fr); }
+.pipe-track { position: absolute; top: 19px; left: 12%; right: 12%; height: 2px; background: repeating-linear-gradient(90deg, var(--surface-3) 0 6px, transparent 6px 10px); }
+.packet { position: absolute; top: -4px; left: 0; width: 10px; height: 10px; border-radius: 50%; background: var(--signal); box-shadow: 0 0 8px var(--signal-halo); animation-name: packet-run; animation-timing-function: cubic-bezier(.4, 0, .2, 1); animation-fill-mode: forwards; }
+.packet-ok, .packet-saved { background: var(--ok); }
+.packet-failed { background: var(--muted); }
+.packet-finding, .packet-alarm { background: var(--warn); box-shadow: 0 0 10px color-mix(in srgb, var(--warn) 60%, transparent); }
+.packet-start { background: var(--text); }
+@keyframes packet-run { from { left: 0; opacity: 0; } 10% { opacity: 1; } 90% { opacity: 1; } to { left: calc(100% - 10px); opacity: 0; } }
+.pipe-node { position: relative; display: grid; justify-items: center; gap: 6px; text-align: center; }
+.pipe-icon { width: 32px; height: 32px; border-radius: 50%; background: var(--surface-2); border: 2px solid var(--signal); }
+.node-spot .pipe-icon { background: var(--signal); }
+.node-lake.is-saving .pipe-icon { border-color: var(--ok); box-shadow: 0 0 0 6px color-mix(in srgb, var(--ok) 25%, transparent); transition: box-shadow .3s; }
+.pipe-label { font-size: 11px; letter-spacing: .06em; color: var(--muted); }
+
+.route { display: flex; gap: 6px; margin-bottom: 14px; }
+.route-step { flex: 1; height: 6px; background: var(--surface-3); }
+.step-ok { background: var(--ok); }
+.step-failed { background: var(--warn); }
+.step-now { background: var(--signal); animation: blink 1.2s ease-in-out infinite; }
+.stream-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 0 0 14px; }
+.stream-stats dt { font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+.stream-stats dd { margin: 2px 0 0; font-size: 15px; font-variant-numeric: tabular-nums; }
+.stream-events { list-style: none; margin: 0 0 12px; padding: 0; display: grid; gap: 6px; font-size: 13px; }
+.ev { display: flex; align-items: center; gap: 8px; animation: ticker-in .35s ease-out; }
+.ev-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--signal); flex: none; }
+.ev-ok .ev-dot, .ev-saved .ev-dot { background: var(--ok); }
+.ev-failed .ev-dot { background: var(--muted); }
+.ev-finding .ev-dot, .ev-alarm .ev-dot { background: var(--warn); }
+.ev-alarm { color: var(--warn); }
+
+@media (max-width: 640px) {
+  .decision, .decision-chip { right: 16px; left: 16px; width: auto; }
+  .stream-bubble, .stream-dialog { left: 16px; bottom: 16px; }
+  .stream-stats { grid-template-columns: repeat(2, 1fr); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .decision { animation: none; }
+  .packet { display: none; }
+}

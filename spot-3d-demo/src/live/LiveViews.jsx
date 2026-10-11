@@ -5,10 +5,10 @@ import { humanize, measurementLabel, num, reading } from '../lib/format.js';
 import { SPEEDS, useLive } from './LiveContext.jsx';
 
 const STATE_LABEL = {
-  running: 'Running', paused: 'Paused', waiting_for_decision: 'Waiting for an alarm decision', saving: 'Saving mission',
+  running: 'Running', paused: 'Paused', waiting_for_decision: 'Waiting for a decision', saving: 'Saving mission',
   finished: 'Finished', idle: 'Idle', resetting: 'Resetting',
 };
-const STATE_TONE = { running: 'ok', paused: 'warn', waiting_for_decision: 'bad', saving: 'accent', finished: 'muted', idle: 'muted', resetting: 'warn' };
+const STATE_TONE = { running: 'ok', paused: 'warn', waiting_for_decision: 'warn', saving: 'accent', finished: 'muted', idle: 'muted', resetting: 'warn' };
 const speedOptions = SPEEDS.map(s => [String(s), `×${s}`]);
 const clock = iso => (iso ? new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '');
 
@@ -22,7 +22,7 @@ export function LiveBadge() {
         <i aria-hidden="true" />
         {mode === 'sandbox' ? 'Sandbox' : 'Live'}{run.mission_id ? ` · ${run.mission_id}` : ''}
         {run.location_id ? ` · ${run.location_id}` : ''}{run.battery_pct != null ? ` · ${run.battery_pct}%` : ''}
-        {status.state === 'waiting_for_decision' ? ' · alarm' : hold ? ' · paused' : ''}
+        {status.state === 'waiting_for_decision' ? ' · decision needed' : hold ? ' · paused' : ''}
       </span>
     );
   }
@@ -179,6 +179,7 @@ export function PresenterControls() {
   const { session, setSession, bump } = useApp();
   const health = useApi('/health');
   const [speed, setSpeed] = useState('60');
+  const [pauseOnAlarm, setPauseOnAlarm] = useState(true);
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
   const p = live.presenter;
@@ -215,8 +216,9 @@ export function PresenterControls() {
           {!running && (
             <>
               <Segmented label="Speed" options={speedOptions} value={speed} onChange={setSpeed} />
+              <label className="check"><input type="checkbox" checked={pauseOnAlarm} onChange={e => setPauseOnAlarm(e.target.checked)} /> Pause at decisions</label>
               <button type="button" className="btn btn-accent btn-sm" disabled={Boolean(busy) || state === 'offline'}
-                onClick={() => call('start', { speed: Number(speed), pause_on_alarm: false })}>Start live feed</button>
+                onClick={() => call('start', { speed: Number(speed), pause_on_alarm: pauseOnAlarm })}>Start live feed</button>
             </>
           )}
           {running && (
@@ -230,6 +232,7 @@ export function PresenterControls() {
           {session.role === 'supervisor' && (
             <button type="button" className="btn btn-danger btn-sm" disabled={Boolean(busy) || state === 'offline'} onClick={() => call('reset')}>Reset to baseline</button>
           )}
+          <button type="button" className="btn btn-ghost btn-sm" onClick={() => live.testAlert()}>Practice decision (this screen)</button>
         </div>
       )}
       {error && <p className="note note-error" role="alert">{error}</p>}

@@ -4,10 +4,14 @@ import { api, INGEST_URL, useApp } from '../api.js';
 /**
  * Everything live, in one place, for both modes:
  * - presenter: the Java ingest API plays the IMPROVED missions for every open dashboard (GET /events), and a signed-in
- *   operator drives it from the Operator Console. Missions are saved and KPIs really change.
+ *   operator drives it from the Operator Console. Missions are saved, decisions are shared, KPIs really change.
  * - sandbox: this browser plays the same events from GET /live/script on its own timer. Nothing is saved and no one
- *   else sees it.
- * Both feed the same reducer, so the top bar, Overview panel, 3D Spot and map look identical in either mode.
+ *   else sees it; decisions stay in this tab.
+ * Both feed the same reducer, so the top bar, Overview panel, 3D Spot, map, stream bubble and decision card look
+ * identical in either mode.
+ *
+ * `alerts` holds the anomalies waiting for a person's decision (alarm-level: HIGH / CRITICAL or flagged for review),
+ * keyed by anomaly_id; `sandbox: true` marks ones decided in this browser only.
  */
 const LiveContext = createContext(null);
 export const useLive = () => useContext(LiveContext);
@@ -71,6 +75,7 @@ export function LiveProvider({ children }) {
   const [presenter, setPresenter] = useState(null); // Java /live/status
   const [sandbox, setSandbox] = useState(null); // { state, speed, mission_index, mission_total, message }
   const [run, dispatch] = useReducer(runReducer, EMPTY_RUN);
+  const [alerts, setAlerts] = useState({});
   const player = useRef({ timer: 0, script: null, mi: 0, ei: 0 });
   const sandboxRef = useRef(null);
   sandboxRef.current = sandbox;
@@ -84,9 +89,12 @@ export function LiveProvider({ children }) {
     } }).then(r => dispatch({ type: 'risk', id: d.action_id, risk: { value: r.failure_risk, flagged: r.flagged } }), () => {});
   }, []);
 
-  const onEvent = useCallback(e => {
+  const onEvent = useCallback((e, local = false) => {
     dispatch({ type: 'event', event: e });
     if (e.type === 'ACTION_STARTED') predict(e.details);
+    if (e.type === 'ANOMALY_DETECTED' && e.alarm) {
+      setAlerts(a => ({ ...a, [e.details.anomaly_id]: { ...e.details, mission_id: e.mission_id, sandbox: local, raised_at: Date.now() } }));
+    }
   }, [predict]);
 
   // ---------- presenter mode: the shared stream from the Java ingest API ----------
@@ -106,9 +114,20 @@ export function LiveProvider({ children }) {
       const s = parse(e);
       if (s) setPresenter(s);
     });
-    // A saved mission (live feed or `feed` CLI): refresh every view.
-    es.addEventListener('mission_ingested', () => refreshSoon());
+    // A saved mission (live feed or `feed` CLI): refresh every view. Its alerts are ones not already raised live.
+    es.addEventListener('mission_ingested', e => {
+      const event = parse(e);
+      if (event?.alerts?.length) {
+        setAlerts(a => {
+          const next = { ...a };
+          for (const al of event.alerts) next[al.anomaly_id] = { ...al, mission_id: al.mission_id || event.mission_id, sandbox: false, raised_at: Date.now() };
+          return next;
+        });
+      }
+      refreshSoon();
+    });
     es.addEventListener('live_reset', () => {
+      setAlerts(a => Object.fromEntries(Object.entries(a).filter(([, v]) => v.sandbox)));
       if (!(sandboxRef.current && ACTIVE.has(sandboxRef.current.state))) dispatch({ type: 'reset' });
       refreshSoon();
     });
@@ -141,9 +160,14 @@ export function LiveProvider({ children }) {
       return;
     }
     const event = mission.events[p.ei];
-    onEvent({ ...event, live_at: new Date().toISOString(), speed: s.speed, sandbox: true });
+    onEvent({ ...event, live_at: new Date().toISOString(), speed: s.speed, sandbox: true }, true);
     if (event.type === 'MISSION_STARTED') setSandbox(x => ({ ...x, mission_index: p.mi + 1, message: `${event.mission_id} started (${p.mi + 1} of ${p.script.missions.length}).` }));
     p.ei += 1;
+    if (event.alarm && s.pause_on_alarm) {
+      setSandbox(x => ({ ...x, state: 'waiting_for_decision', waiting_for: event.details.anomaly_id,
+        message: `Waiting for your decision on ${event.details.anomaly_id}.` }));
+      return;
+    }
     if (p.ei >= mission.events.length) {
       p.mi += 1;
       p.ei = 0;
@@ -163,11 +187,13 @@ export function LiveProvider({ children }) {
   }, [sandbox?.state, schedule]);
   useEffect(() => () => clearTimeout(player.current.timer), []);
 
-  const startSandbox = useCallback(async (speed = 60) => {
+  const startSandbox = useCallback(async (speed = 60, pauseOnAlarm = true) => {
     const script = player.current.script || await api('/live/script');
     player.current = { timer: 0, script, mi: 0, ei: 0 };
     dispatch({ type: 'reset' });
-    setSandbox({ state: 'running', speed, mission_index: 0, mission_total: script.missions.length,
+    setAlerts(a => Object.fromEntries(Object.entries(a).filter(([, v]) => !v.sandbox)));
+    setSandbox({ state: 'running', speed, pause_on_alarm: pauseOnAlarm, waiting_for: null, mission_index: 0,
+      mission_total: script.missions.length,
       message: `Sandbox: ${script.missions.length} missions at ×${speed}. Only you see this; nothing is saved.` });
   }, []);
 
@@ -175,27 +201,60 @@ export function LiveProvider({ children }) {
     setSandbox(s => {
       if (!s) return s;
       if (action === 'pause' && s.state === 'running') return { ...s, state: 'paused', message: 'Sandbox paused.' };
-      if (action === 'resume' && s.state === 'paused') return { ...s, state: 'running', message: 'Sandbox resumed.' };
+      if (action === 'resume' && (s.state === 'paused' || s.state === 'waiting_for_decision')) return { ...s, state: 'running', waiting_for: null, message: 'Sandbox resumed.' };
       if (action === 'stop') return null;
       return s;
     });
     if (action === 'stop') {
       clearTimeout(player.current.timer);
       dispatch({ type: 'reset' });
+      setAlerts(a => Object.fromEntries(Object.entries(a).filter(([, v]) => !v.sandbox)));
     }
   }, []);
 
   const setSandboxSpeed = useCallback(speed => setSandbox(s => (s ? { ...s, speed } : s)), []);
 
+  /** A decision made in this browser (sandbox or practice alert). The sandbox carries on once nothing is waiting. */
+  const alertsRef = useRef(alerts);
+  alertsRef.current = alerts;
+  const resolveLocal = useCallback(id => {
+    const rest = Object.entries(alertsRef.current).filter(([k]) => k !== id);
+    setAlerts(a => Object.fromEntries(Object.entries(a).filter(([k]) => k !== id)));
+    if (!rest.some(([, v]) => v.sandbox)) {
+      setSandbox(s => (s && s.state === 'waiting_for_decision'
+        ? { ...s, state: 'running', waiting_for: null, message: 'Decision noted. Sandbox resumed.' } : s));
+    }
+  }, []);
+
+  /** Drop shared alerts that have been decided (here, or by someone in another tab). */
+  const dismiss = useCallback(ids => {
+    setAlerts(a => {
+      const next = { ...a };
+      let changed = false;
+      for (const id of ids) if (next[id] && !next[id].sandbox) { delete next[id]; changed = true; }
+      return changed ? next : a;
+    });
+  }, []);
+
+  /** A practice decision card on this screen only, built from a real kit anomaly. */
+  const testAlert = useCallback(async () => {
+    const script = player.current.script || await api('/live/script');
+    player.current.script = script;
+    const event = script.missions.flatMap(m => m.events).find(e => e.alarm);
+    const id = `PRACTICE-${Date.now().toString(36).toUpperCase()}`;
+    setAlerts(a => ({ ...a, [id]: { ...event.details, anomaly_id: id, mission_id: event.mission_id, sandbox: true,
+      practice: true, raised_at: Date.now() } }));
+  }, []);
+
   const presenterActive = Boolean(presenter && ACTIVE.has(presenter.state));
   const mode = sandboxActive || (sandbox && !presenterActive) ? 'sandbox' : presenterActive ? 'presenter' : null;
   const status = mode === 'sandbox' ? sandbox : presenter;
   const value = useMemo(() => ({
-    stream, presenter, sandbox, run, mode, status,
+    stream, presenter, sandbox, run, mode, status, alerts,
     active: mode === 'sandbox' ? sandboxActive : presenterActive,
     presenterActive, sandboxActive,
-    startSandbox, sandboxControl, setSandboxSpeed,
-  }), [stream, presenter, sandbox, run, mode, status, sandboxActive, presenterActive,
-    startSandbox, sandboxControl, setSandboxSpeed]);
+    startSandbox, sandboxControl, setSandboxSpeed, resolveLocal, dismiss, testAlert,
+  }), [stream, presenter, sandbox, run, mode, status, alerts, sandboxActive, presenterActive,
+    startSandbox, sandboxControl, setSandboxSpeed, resolveLocal, dismiss, testAlert]);
   return <LiveContext.Provider value={value}>{children}</LiveContext.Provider>;
 }

@@ -10,6 +10,8 @@ import { BackToTop, Toasts } from './components/ui.jsx';
 import { scrollToEl } from './lib/dom.js';
 import { LiveProvider } from './live/LiveContext.jsx';
 import { LiveBadge } from './live/LiveViews.jsx';
+import DecisionCard from './live/DecisionCard.jsx';
+import StreamBubble from './live/StreamBubble.jsx';
 
 const TABS = [['overview', 'Overview'], ['replay', 'Replay'], ['analysis', 'Data Analysis'], ['operator', 'Operator']];
 const PLAIN_TABS = ['overview', 'replay'];
@@ -173,6 +175,8 @@ export default function App() {
         {/* Right after the assistant so CSS can hide it while the assistant panel is open. */}
         <BackToTop />
       </div>
+      <StreamBubble />
+      <DecisionCard />
       <Toasts items={toasts} />
       </LiveProvider>
     </AppContext.Provider>
