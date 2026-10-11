@@ -274,6 +274,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                                 f"{loc['location_name']} fails" + (" - above the alert threshold." if flagged else ".")),
                 "model": risk_model.info}
 
+    @app.get("/model/brief", tags=["model"])
+    def model_brief(request: Request):
+        """'About these numbers': the data's limits, why the evaluation is honest, and the model's potential."""
+        client = (request.headers.get("x-forwarded-for", "").split(",")[0].strip()
+                  or (request.client.host if request.client else "anonymous"))
+        return assistant.model_brief(data(), metrics(), client=client)
+
     @app.get("/report/summary", tags=["assistant"])
     def report_summary(request: Request):
         """The PDF's AI review: how the new (V2) data compares with the baseline and how the model did on new missions."""

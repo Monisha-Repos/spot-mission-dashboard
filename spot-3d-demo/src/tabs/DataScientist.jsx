@@ -229,6 +229,38 @@ function Outcomes({ compare }) {
   );
 }
 
+/** "About these numbers": the data's limits, why the evaluation is honest, and the model's potential. Written by the
+ * AI from the computed figures when first opened (one cached call), or the figures themselves without an AI provider. */
+function ModelBrief() {
+  const [state, setState] = useState({ loading: false, data: null, error: '' });
+  function onToggle(e) {
+    if (!e.currentTarget.open || state.data || state.loading) return;
+    setState({ loading: true, data: null, error: '' });
+    api('/model/brief').then(data => setState({ loading: false, data, error: '' }), err => setState({ loading: false, data: null, error: err.message }));
+  }
+  const d = state.data;
+  const byAI = d && d.provider !== 'none';
+  return (
+    <details className="ai-brief" onToggle={onToggle}>
+      <summary>
+        <span className="ai-brief-title">About these numbers</span>
+        <span className="muted"> · the data's limits, why this is an honest test, and where the model can go</span>
+      </summary>
+      <div className="ai-brief-body">
+        {state.loading && <p className="typing">Writing the brief…</p>}
+        {state.error && <p className="note note-error" role="alert">{state.error}</p>}
+        {d && String(d.text).split(/\n\s*\n/).filter(Boolean).map((para, i) => <p key={i}>{para.trim()}</p>)}
+        {d && (
+          <p className="ai-brief-source">
+            {byAI ? `Written by the AI assistant (${d.model}) from the figures on this page; it was told not to add facts of its own.`
+              : 'The figures behind this page, as they are (no AI model is configured on the server).'}
+          </p>
+        )}
+      </div>
+    </details>
+  );
+}
+
 function ModelMetrics({ m, links }) {
   const t = m.test, cm = t.confusion_matrix;
   const rows = [[`${sentence(m.model_type)} (selected)`, t], ...Object.entries(m.baselines || {}).map(([k, b]) => [k === 'battery_rule' ? `Rule: ${b.rule}` : sentence(k), b])];
@@ -236,17 +268,27 @@ function ModelMetrics({ m, links }) {
     <>
       <p className="lead">{m.target}. Threshold {m.decision_threshold}.</p>
       <h3>Training, test and live data</h3>
-      <p>Split by whole mission, so no mission is in two sets{m.split.revision ? ` (dataset revision ${m.split.revision})` : ''}: {m.split.method}.</p>
+      <p>Split by whole mission, so no mission is in two sets: the model learns from the training missions, is scored once on
+        the test missions, and the {m.split.live_missions?.length || 4} newest missions are kept back to test it on new data.</p>
       <div className="table-scroll">
         <table>
-          <thead><tr><th scope="col">Set</th><th scope="col" className="num">Actions</th><th scope="col">Missions</th><th scope="col">Used for</th></tr></thead>
+          <thead><tr><th scope="col">Set</th><th scope="col" className="num">Missions</th><th scope="col" className="num">Steps</th><th scope="col">Used for</th></tr></thead>
           <tbody>
-            <tr><th scope="row">Train</th><td className="num">{m.split.train_actions}</td><td>{m.split.train_missions.join(', ')}</td><td>Fitting, model choice (cross-validation), threshold</td></tr>
-            <tr><th scope="row">Test</th><td className="num">{m.split.test_actions}</td><td>{m.split.test_missions.join(', ')}</td><td>Scored once ({m.split.test_failures} failures); the numbers below</td></tr>
-            {m.split.live_missions && <tr><th scope="row">Live</th><td className="num">{m.split.live_actions}</td><td>{m.split.live_missions.join(', ')}</td><td>Never used in training: scored as they stream in (below)</td></tr>}
+            <tr><th scope="row">Train</th><td className="num">{m.split.train_missions.length}</td><td className="num">{m.split.train_actions}</td><td>Learning, choosing the model, setting its alert level</td></tr>
+            <tr><th scope="row">Test</th><td className="num">{m.split.test_missions.length}</td><td className="num">{m.split.test_actions}</td><td>Scored once ({m.split.test_failures} failures): the numbers below</td></tr>
+            {m.split.live_missions && <tr><th scope="row">Live</th><td className="num">{m.split.live_missions.length}</td><td className="num">{m.split.live_actions}</td><td>Never used in training: scored as they stream in (below)</td></tr>}
           </tbody>
         </table>
       </div>
+      <details className="split-missions">
+        <summary>Show which missions</summary>
+        <dl>
+          <dt>Train</dt><dd>{m.split.train_missions.join(', ')}</dd>
+          <dt>Test</dt><dd>{m.split.test_missions.join(', ')}</dd>
+          {m.split.live_missions && <><dt>Live</dt><dd>{m.split.live_missions.join(', ')}</dd></>}
+        </dl>
+        <p className="muted">How: {m.split.method}{m.split.revision ? ` (dataset revision ${m.split.revision})` : ''}.</p>
+      </details>
       {links && (links.dataset || links.model) && (
         <p className="hf-links">
           {links.dataset && (
@@ -261,6 +303,7 @@ function ModelMetrics({ m, links }) {
           )}
         </p>
       )}
+      <ModelBrief />
       <div className="stat-grid">
         <Stat label="Precision" value={num(t.precision, 3)} hint={GLOSSARY.precision} />
         <Stat label="Recall" value={num(t.recall, 3)} hint={GLOSSARY.recall} />

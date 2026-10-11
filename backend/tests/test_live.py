@@ -165,3 +165,17 @@ def test_report_summary_uses_only_computed_facts(tmp_path, monkeypatch):
         assert c.get("/report/summary").json()["cached"]  # one paid call per dataset
     assert r["provider"] == "huggingface" and r["model"] == "test-model" and "retraining" in r["text"]
     assert seen["mode"] == "report" and "<facts>" in seen["prompt"] and "77.2%" in seen["prompt"]
+
+
+def test_model_brief_facts_are_precise(tmp_path):
+    lake = _baseline_lake(tmp_path)
+    with TestClient(create_app(make_settings(tmp_path, LAKEHOUSE="local", LAKEHOUSE_DIR=str(lake)))) as c:
+        before = c.get("/model/brief").json()
+        after = c.get("/model/brief?sandbox=M019,M020,M021,M022,M023,M024,M025,M026,M027").json()
+    facts = " ".join(before["facts"])
+    assert before["provider"] == "none" and before["text"]
+    assert "14 V1 + 4 V2" in facts and "4 V1 + 1 V2" in facts  # both setups in training and test
+    assert "frozen" in facts and "TEST SET" in facts
+    assert "has not happened" in facts  # the live missions haven't arrived in a baseline-only lakehouse
+    live = " ".join(after["facts"])
+    assert "LIVE TEST result" in live and "has not happened" not in live

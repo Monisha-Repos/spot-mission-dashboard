@@ -1199,3 +1199,17 @@ body:has(.stream-bubble, .stream-dialog) .toasts { bottom: 96px; }
 /* Links to the published dataset and model on the Hugging Face Hub. */
 .hf-links { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0 0; }
 .hf-links .btn { text-decoration: none; }
+
+/* Model section: mission lists on request, and the AI-written "About these numbers" brief. */
+.split-missions { margin: 8px 0 0; font-size: 14px; }
+.split-missions summary { cursor: pointer; color: var(--muted); }
+.split-missions summary:hover { color: var(--text); }
+.split-missions dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 12px 0 8px; }
+.split-missions dt { font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); padding-top: 2px; }
+.split-missions dd { margin: 0; font-variant-numeric: tabular-nums; }
+.ai-brief { margin: 20px 0 8px; border: 1px solid var(--line); border-left: 3px solid var(--signal); background: var(--surface); }
+.ai-brief summary { padding: 14px 16px; cursor: pointer; }
+.ai-brief-title { font-weight: 500; }
+.ai-brief-body { padding: 0 16px 16px; max-width: 900px; }
+.ai-brief-body p { margin: 0 0 12px; line-height: 1.6; }
+.ai-brief-source { font-size: 12px; color: var(--muted); }
