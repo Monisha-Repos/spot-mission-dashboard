@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { asset as assetUrl, useApi } from '../api.js';
-import { Async, Badge, Battery, Section, Segmented, Stat } from '../components/ui.jsx';
+import { Async, Badge, Battery, FadeImg, Section, Segmented, Stat } from '../components/ui.jsx';
 import { batteryLevel, humanize, reading, tone } from '../lib/format.js';
 import {
   RESULT, buildTimeline, clockAt, dayLabel, didWhat, doingWhat, elapsed, nextFindingAfter, nextWhat, stateAt,
@@ -145,7 +145,7 @@ function ReplayMap({ waypoints, tl, now, at }) {
 
 /* ---------- what Spot is doing right now ---------- */
 
-function NowCard({ tl, now, at, mission, onRestart }) {
+function NowCard({ tl, now, at, mission, playing, onRestart }) {
   const n = tl.stops.length;
   const s = now.current;
   const r = s?.record;
@@ -197,7 +197,7 @@ function NowCard({ tl, now, at, mission, onRestart }) {
       ) : <p className="muted">No stops recorded for this run.</p>}
 
       <div className="now-meters">
-        <div className={`meter batt-${batteryLevel(now.battery)}`}>
+        <div className={`meter batt-${batteryLevel(now.battery)}${playing ? ' is-live' : ''}`}>
           <span className="meter-label">Battery</span>
           <span className="meter-track"><span style={{ width: `${now.battery ?? 0}%` }} /></span>
           <span className="meter-value"><Battery pct={now.battery} /></span>
@@ -318,7 +318,7 @@ function StopList({ tl, at, filter, onSeek }) {
                   </div>
                   {r.evidence_image && (
                     <figure className="evidence stop-evidence">
-                      <img src={assetUrl(r.evidence_image)} alt={`Reference picture for ${r.asset.name}`} loading="lazy" />
+                      <FadeImg src={assetUrl(r.evidence_image)} alt={`Reference picture for ${r.asset.name}`} loading="lazy" />
                       <figcaption>Reference image</figcaption>
                     </figure>
                   )}
@@ -454,7 +454,7 @@ export default function Replay({ missionId, onMission }) {
                 <Async state={waypoints}>{wps => <ReplayMap waypoints={wps} tl={tl} now={now} at={at} />}</Async>
               </div>
               <div className="player-now" aria-label="What Spot is doing">
-                <NowCard tl={tl} now={now} at={at} mission={mission} onRestart={() => { setAt(0); setPlaying(true); }} />
+                <NowCard tl={tl} now={now} at={at} mission={mission} playing={playing} onRestart={() => { setAt(0); setPlaying(true); }} />
               </div>
 
               <div className="player-transport">

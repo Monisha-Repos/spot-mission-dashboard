@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useLayoutEffect, useRef, useState } from 'react';
 import { API_URL } from '../api.js';
 import { batteryLevel, num } from '../lib/format.js';
 
@@ -26,6 +26,28 @@ export function Stat({ label, value, sub, tone }) {
       <strong className="stat-value">{value}</strong>
       {sub && <span className="stat-sub">{sub}</span>}
     </div>
+  );
+}
+
+/** <img> that fades in once loaded. Cached images show straight away; a failed load still reveals the alt text. */
+export function FadeImg({ src, alt, className = '', ...rest }) {
+  const ref = useRef(null);
+  const [loaded, setLoaded] = useState(false);
+  useLayoutEffect(() => {
+    const img = ref.current;
+    setLoaded(Boolean(img && img.complete && img.naturalWidth > 0));
+  }, [src]);
+  const show = () => setLoaded(true);
+  return (
+    <img
+      ref={ref}
+      src={src}
+      alt={alt}
+      className={`fade-img${loaded ? ' is-loaded' : ''}${className ? ` ${className}` : ''}`}
+      onLoad={show}
+      onError={show}
+      {...rest}
+    />
   );
 }
 

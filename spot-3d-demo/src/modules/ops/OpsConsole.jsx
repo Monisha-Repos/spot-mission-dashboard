@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { api, asset, useApi, useApp } from '../../api.js';
-import { Async, Badge, Field, Section, Segmented, Stat } from '../../components/ui.jsx';
+import { Async, Badge, FadeImg, Field, Section, Segmented, Stat } from '../../components/ui.jsx';
 import LineChart from '../../components/LineChart.jsx';
 import LoginForm from './LoginForm.jsx';
 import { downloadReport } from '../../lib/report.js';
@@ -74,7 +74,7 @@ function IssueDetail({ id }) {
               <Stat label="Predicted risk" value={num(i.predicted_failure_risk, 2)} />
               <Stat label="Assignee" value={i.assignee || '—'} />
             </div>
-            {i.evidence_image && <figure className="evidence evidence-sm"><img src={asset(i.evidence_image)} alt="Reference inspection image" loading="lazy" /><figcaption>Reference image</figcaption></figure>}
+            {i.evidence_image && <figure className="evidence evidence-sm"><FadeImg src={asset(i.evidence_image)} alt="Reference inspection image" loading="lazy" /><figcaption>Reference image</figcaption></figure>}
 
             {session ? (
               <form className="issue-form" onSubmit={submit}>

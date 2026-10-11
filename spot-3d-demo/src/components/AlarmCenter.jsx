@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { api, asset, INGEST_URL, useApi, useApp } from '../api.js';
 import { FloorPlane } from './InclinedMap.jsx';
+import { FadeImg } from './ui.jsx';
 import LoginForm from '../modules/ops/LoginForm.jsx';
 import { formatTime, humanize, measurementLabel, num, reading, titleCase } from '../lib/format.js';
 
@@ -152,7 +153,7 @@ export default function AlarmCenter({ siren, muted, onMute, onActive, onStream }
               </div>
             )}
             <figure className="evidence evidence-sm">
-              <img src={asset(current.image)} alt={`Reference image for ${humanize(current.type)}`} />
+              <FadeImg src={asset(current.image)} alt={`Reference image for ${humanize(current.type)}`} />
               <figcaption>Reference image (not a live capture)</figcaption>
             </figure>
           </div>

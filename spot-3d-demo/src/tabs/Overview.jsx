@@ -1,6 +1,6 @@
 import React, { Suspense, lazy, useEffect, useMemo, useState } from 'react';
 import { asset, useApi } from '../api.js';
-import { Async, Badge, Bars, Section, Segmented, Stat } from '../components/ui.jsx';
+import { Async, Badge, Bars, FadeImg, Section, Segmented, Stat } from '../components/ui.jsx';
 import InclinedMap from '../components/InclinedMap.jsx';
 import { formatTime, num, pct, reading, severityTone, titleCase, tone } from '../lib/format.js';
 
@@ -60,7 +60,7 @@ function PartPanel({ id, onClose }) {
             <Bars data={p.anomalies_by_type} tone="warn" />
             {PART_IMAGES[id] && (
               <figure className="evidence">
-                <img src={asset(`/static/inspection-images/${PART_IMAGES[id]}`)} alt={`Reference image for the ${p.name}`} loading="lazy" />
+                <FadeImg src={asset(`/static/inspection-images/${PART_IMAGES[id]}`)} alt={`Reference image for the ${p.name}`} loading="lazy" />
                 <figcaption>Reference image from the challenge kit</figcaption>
               </figure>
             )}

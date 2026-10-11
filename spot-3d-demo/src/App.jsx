@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { flushSync } from 'react-dom';
 import { AppContext, loadSession, saveSession } from './api.js';
 import Overview from './tabs/Overview.jsx';
 import Replay from './tabs/Replay.jsx';
@@ -52,6 +53,17 @@ export default function App() {
   const setSession = useCallback(s => { saveSession(s); setSessionState(s); }, []);
   const app = useMemo(() => ({ version, bump, session, setSession }), [version, bump, session, setSession]);
 
+  // Crossfade the theme swap where the browser supports view transitions; otherwise switch instantly.
+  function toggleTheme() {
+    const next = theme === 'dark' ? 'light' : 'dark';
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (!document.startViewTransition || reduce) { setTheme(next); return; }
+    document.startViewTransition(() => {
+      document.documentElement.dataset.theme = next;
+      flushSync(() => setTheme(next));
+    });
+  }
+
   function arm() {
     if (siren) { setMuted(m => !m); return; }
     const s = createSiren();
@@ -84,7 +96,7 @@ export default function App() {
             <button
               type="button"
               className="icon-btn theme-toggle"
-              onClick={() => setTheme(t => (t === 'dark' ? 'light' : 'dark'))}
+              onClick={toggleTheme}
               aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
               title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
             >

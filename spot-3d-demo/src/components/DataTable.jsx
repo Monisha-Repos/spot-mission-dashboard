@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { sortRows } from '../lib/format.js';
 
 const PAGE = 25;
@@ -12,6 +12,7 @@ export default function DataTable({ rows, columns, filters = [], caption, rowKey
   const [sort, setSort] = useState({ key: columns[0].key, dir: 'asc' });
   const [picked, setPicked] = useState({});
   const [page, setPage] = useState(0);
+  const [scrolled, setScrolled] = useState(false);
   const getter = c => c.get || (r => r[c.key]);
 
   const options = useMemo(() => Object.fromEntries(filters.map(f => [
@@ -30,6 +31,9 @@ export default function DataTable({ rows, columns, filters = [], caption, rowKey
   const current = Math.min(page, pages - 1);
   const shown = visible.slice(current * PAGE, current * PAGE + PAGE);
   const toggle = key => { setSort(s => ({ key, dir: s.key === key && s.dir === 'asc' ? 'desc' : 'asc' })); setPage(0); };
+  // A new page, sort or filter starts at the top of the scroll box.
+  const box = useRef(null);
+  useEffect(() => { if (box.current) box.current.scrollTop = 0; }, [current, sort, query, picked]);
 
   return (
     <div className="table-wrap">
@@ -43,7 +47,11 @@ export default function DataTable({ rows, columns, filters = [], caption, rowKey
         ))}
         <span className="muted table-count">{visible.length} of {rows.length}</span>
       </div>
-      <div className="table-scroll">
+      <div
+        ref={box}
+        className={`table-scroll table-scroll-y${scrolled ? ' is-scrolled' : ''}`}
+        onScroll={e => { const s = e.currentTarget.scrollTop > 0; if (s !== scrolled) setScrolled(s); }}
+      >
         <table>
           <caption className="sr-only">{caption}</caption>
           <thead>
