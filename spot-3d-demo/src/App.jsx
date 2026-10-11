@@ -9,16 +9,12 @@ import AskPanel from './components/AskPanel.jsx';
 import AlarmCenter from './components/AlarmCenter.jsx';
 import { BackToTop, Toasts } from './components/ui.jsx';
 import { createSiren } from './lib/siren.js';
-<<<<<<< HEAD
 import { LiveProvider } from './live/LiveContext.jsx';
 import { LiveBadge } from './live/LiveViews.jsx';
-=======
 import { scrollToEl } from './lib/dom.js';
->>>>>>> 8e76fc51df2b89257fcaaa42a3addfd56ef357cc
 
 const TABS = [['overview', 'Overview'], ['replay', 'Replay'], ['analysis', 'Data Analysis'], ['operator', 'Operator']];
 const PLAIN_TABS = ['overview', 'replay'];
-const STREAM_LABEL = { live: 'Live updates on', offline: 'Live updates offline', connecting: 'Connecting to live updates…' };
 
 function stored(key, fallback, allowed) {
   try {
@@ -56,9 +52,6 @@ export default function App() {
   const [siren, setSiren] = useState(null);
   const [muted, setMuted] = useState(false);
   const [alarm, setAlarm] = useState(false);
-<<<<<<< HEAD
-=======
-  const [stream, setStream] = useState('connecting');
   const [toasts, setToasts] = useState([]);
   const refreshed = useLastRefresh();
   const topbar = useRef(null);
@@ -94,7 +87,6 @@ export default function App() {
     setToasts(t => [...t.slice(-2), { id, text }]);
     setTimeout(() => setToasts(t => t.filter(x => x.id !== id)), 3200);
   }, []);
->>>>>>> 8e76fc51df2b89257fcaaa42a3addfd56ef357cc
 
   useEffect(() => {
     const { pathname, search } = window.location;
@@ -137,7 +129,6 @@ export default function App() {
     if (s) { s.test(); setSiren(s); }
   }
 
-  const streamText = STREAM_LABEL[stream] || STREAM_LABEL.connecting;
   return (
     <AppContext.Provider value={app}>
       <LiveProvider>
@@ -156,19 +147,10 @@ export default function App() {
             ))}
           </nav>
           <div className="topbar-tools">
-<<<<<<< HEAD
-            <LiveBadge />
-=======
             <span className="status">
-              <span
-                className={`live live-${stream}`}
-                title={`${streamText}. This is only the live mission feed; recorded data keeps working without it.`}
-              >
-                <i aria-hidden="true" /><span className="live-text">{streamText}</span>
-              </span>
+              <LiveBadge />
               {refreshed && <span className="refreshed" title="Last time data loaded from the backend">Data updated {clock(refreshed)}</span>}
             </span>
->>>>>>> 8e76fc51df2b89257fcaaa42a3addfd56ef357cc
             <button type="button" className={`btn btn-sm ${siren ? 'btn-ghost' : 'btn-accent'}`} onClick={arm} aria-pressed={siren ? muted : undefined}>
               {!siren ? 'Arm alarms 📢' : muted ? 'Unmute' : 'Mute'}
             </button>
@@ -205,13 +187,9 @@ export default function App() {
         {/* Right after the assistant so CSS can hide it while the assistant panel is open. */}
         <BackToTop />
       </div>
-<<<<<<< HEAD
+      <Toasts items={toasts} />
       <AlarmCenter siren={siren} muted={muted} onMute={() => setMuted(m => !m)} onActive={setAlarm} />
       </LiveProvider>
-=======
-      <Toasts items={toasts} />
-      <AlarmCenter siren={siren} muted={muted} onMute={() => setMuted(m => !m)} onActive={setAlarm} onStream={setStream} />
->>>>>>> 8e76fc51df2b89257fcaaa42a3addfd56ef357cc
     </AppContext.Provider>
   );
 }

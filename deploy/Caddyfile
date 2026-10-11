@@ -1,0 +1,16 @@
+# One public port: /stream/* goes to the Java ingest API (live SSE + feed controls), everything else to FastAPI.
+{
+	admin off
+	auto_https off
+}
+
+:{$PORT:10000} {
+	handle_path /stream/* {
+		reverse_proxy 127.0.0.1:8081 {
+			flush_interval -1
+		}
+	}
+	handle {
+		reverse_proxy 127.0.0.1:8000
+	}
+}

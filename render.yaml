@@ -1,0 +1,23 @@
+# Render Blueprint: the backend container (Dockerfile). The frontend (spot-3d-demo/) is deployed on Vercel.
+services:
+  - type: web
+    name: spot-mission-api
+    runtime: docker
+    plan: starter
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    disk:
+      name: spot-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: OPS_PIN
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: OPS_SECRET
+        generateValue: true
+      - key: INGEST_API_KEY
+        generateValue: true
+      - key: CORS_ORIGINS
+        value: "*"
