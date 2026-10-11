@@ -21,8 +21,10 @@ export function LiveBadge() {
     return (
       <span className={`live live-run${hold ? ' live-hold' : ''}`} title={status.message}>
         <i aria-hidden="true" />
-        {mode === 'sandbox' ? 'Sandbox' : 'Live'}{run.mission_id ? ` · ${run.mission_id}` : ''}
-        {run.location_id ? ` · ${run.location_id}` : ''}{run.battery_pct != null ? ` · ${run.battery_pct}%` : ''}
+        {/* The shared presenter feed just says Live; the sandbox shows where its replay is. */}
+        {mode === 'sandbox'
+          ? `Sandbox${run.mission_id ? ` · ${run.mission_id}` : ''}${run.location_id ? ` · ${run.location_id}` : ''}${run.battery_pct != null ? ` · ${run.battery_pct}%` : ''}`
+          : 'Live'}
         {status.state === 'waiting_for_decision' ? ' · decision needed' : hold ? ' · paused' : ''}
       </span>
     );
