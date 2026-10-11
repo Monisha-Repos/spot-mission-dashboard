@@ -1,0 +1,34 @@
+# Render Blueprint: the backend container (Dockerfile). The frontend (spot-3d-demo/) is deployed on Vercel.
+# Free plan: no disk, so ops.db (Operator Console issues, audit trail, snapshots) resets when the service restarts
+# or wakes from sleep. Mission data is safe in Databricks. For durable ops.db: plan starter + a disk at /var/data.
+services:
+  - type: web
+    name: spot-mission-api
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    envVars:
+      # Mission data: the Databricks lakehouse both APIs read and write.
+      - key: SINK
+        value: databricks
+      - key: DATABRICKS_HOST
+        sync: false
+      - key: DATABRICKS_HTTP_PATH
+        sync: false
+      - key: DATABRICKS_TOKEN
+        sync: false
+      - key: DATABRICKS_CATALOG
+        value: workspace
+      - key: DATABRICKS_SCHEMA
+        value: spot
+      - key: OPS_PIN
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: OPS_SECRET
+        generateValue: true
+      - key: INGEST_API_KEY
+        generateValue: true
+      - key: CORS_ORIGINS
+        value: "*"

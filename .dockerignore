@@ -1,0 +1,14 @@
+# Keep secrets, local state and the frontend out of the backend image.
+**/.env
+**/.env.*
+!**/.env.example
+**/.DS_Store
+**/__pycache__
+**/node_modules
+.git
+.venv
+spot-3d-demo
+data/lakehouse
+data/ops.db*
+docs/orbit-screenshots
+ingest-api/out
