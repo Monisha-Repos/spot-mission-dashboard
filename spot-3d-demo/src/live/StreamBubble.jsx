@@ -100,7 +100,7 @@ export default function StreamBubble() {
     <section className="stream-dialog" role="dialog" aria-label="Live data stream" onKeyDown={e => { if (e.key === 'Escape') setOpen(false); }}>
       <header className="stream-head">
         <div>
-          <p className="eyebrow">{sandbox ? 'Sandbox stream · only this browser' : 'Live stream · everyone sees this'}</p>
+          <p className="eyebrow">{sandbox ? 'Sandbox stream · local data' : 'Live stream · everyone sees this'}</p>
           <h2>{run.mission_id ? `${run.mission_id} · ${stateText}` : stateText}</h2>
         </div>
         <button type="button" className="icon-btn" onClick={() => setOpen(false)} aria-label="Minimize stream view">–</button>

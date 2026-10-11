@@ -140,7 +140,7 @@ export function LivePanel() {
   );
   const t = run.tally;
   return (
-    <Section eyebrow={mode === 'sandbox' ? 'Live · sandbox (only you see this)' : 'Live · presenter feed'}
+    <Section eyebrow={mode === 'sandbox' ? 'Live · Sandbox · local data' : 'Live · presenter feed'}
       title={run.mission_id ? `${run.mission_id} in progress` : 'Live feed'} id="live" className="live-section" actions={controls}>
       <div className="live-grid">
         <div className="live-now">

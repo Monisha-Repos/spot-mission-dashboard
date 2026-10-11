@@ -126,7 +126,7 @@ export default function DecisionCard() {
   }
 
   async function decide(decision, note = '') {
-    const label = decision === 'DANGER' ? 'Sent for a technician to check' : 'Noted as not a problem';
+    const label = decision === 'DANGER' ? 'Flagged for a technician' : 'Noted as not a problem';
     if (current.sandbox) {
       live.resolveLocal(current.id);
       setDone(d => new Set(d).add(current.id));
@@ -213,7 +213,7 @@ export default function DecisionCard() {
       {canDecide ? (
         why === null ? (
           <div className="decision-actions">
-            <button type="button" className="btn btn-accent" disabled={busy} onClick={() => decide('DANGER')}>Send someone to check</button>
+            <button type="button" className="btn btn-accent" disabled={busy} onClick={() => decide('DANGER')}>Flag for a technician</button>
             <button type="button" className="btn btn-ghost" disabled={busy} onClick={() => setWhy('')}>It's fine</button>
           </div>
         ) : (
