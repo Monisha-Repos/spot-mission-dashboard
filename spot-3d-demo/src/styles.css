@@ -1172,3 +1172,7 @@ body:has(.stream-bubble, .stream-dialog) .toasts { bottom: 96px; }
 .live-idle u { text-underline-offset: 3px; }
 .live-idle:hover, .live-idle:focus-visible { color: var(--text); }
 .live-idle:hover u { color: var(--signal); }
+
+/* Reset view: a quiet helper, not a main control. */
+.stage-controls .btn-ghost.stage-reset { background: transparent; border-color: transparent; color: var(--muted); padding-left: 10px; padding-right: 10px; }
+.stage-controls .btn-ghost.stage-reset:hover, .stage-controls .btn-ghost.stage-reset:focus-visible { background: transparent; border-color: var(--line-strong); color: var(--text); }

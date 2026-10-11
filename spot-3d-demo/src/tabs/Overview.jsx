@@ -304,7 +304,7 @@ export default function Overview({ theme, context, setContext, onReplay }) {
           <div className="stage-controls">
             <Segmented label="Pose" options={[['stand', 'Stand'], ['sit', 'Sit'], ['walk', 'Walk']]} value={liveWalking ? 'walk' : stance} onChange={setStance} />
             <button type="button" className="btn btn-ghost btn-sm" aria-pressed={autoRotate} onClick={() => setAutoRotate(v => !v)}>Rotate</button>
-            <button type="button" className="btn btn-ghost btn-sm" onClick={resetView}>Reset view</button>
+            <button type="button" className="btn btn-ghost btn-sm stage-reset" onClick={resetView}>Reset view</button>
             <span className="stage-hint" aria-hidden="true">Drag to rotate · Scroll to zoom</span>
           </div>
           {part && <PartPanel id={part} onClose={closePart} />}
