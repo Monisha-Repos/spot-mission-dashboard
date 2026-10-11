@@ -443,12 +443,8 @@ export default function OpsConsole() {
           </div>
         )}
       </header>
-<<<<<<< HEAD
-      {!session && <Section eyebrow="Sign in" title="Operator sign-in"><LoginForm /></Section>}
-      <PresenterControls />
-=======
       {!session && <SignInBar />}
->>>>>>> 8e76fc51df2b89257fcaaa42a3addfd56ef357cc
+      <PresenterControls />
       {o && (
         <div className="stat-grid">
           <Stat label="Open issues" value={o.open_issues} sub={`${o.issues} total`} tone={o.open_issues ? 'warn' : 'ok'} />

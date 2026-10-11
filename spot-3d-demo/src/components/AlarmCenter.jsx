@@ -37,14 +37,9 @@ function fromEvent(a, waypoints, assets) {
   };
 }
 
-<<<<<<< HEAD
 export default function AlarmCenter({ siren, muted, onMute, onActive }) {
-  const { session, bump } = useApp();
-  const live = useLive();
-=======
-export default function AlarmCenter({ siren, muted, onMute, onActive, onStream }) {
   const { session, bump, notify } = useApp();
->>>>>>> 8e76fc51df2b89257fcaaa42a3addfd56ef357cc
+  const live = useLive();
   const pending = useApi('/ops/alerts?pending=true');
   const waypoints = useApi('/waypoints');
   const assets = useApi('/assets');

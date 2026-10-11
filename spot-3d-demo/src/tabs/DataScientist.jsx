@@ -3,14 +3,10 @@ import { useApi, useApp } from '../api.js';
 import { Async, Badge, Hint, Section, Segmented, Stat } from '../components/ui.jsx';
 import DataTable from '../components/DataTable.jsx';
 import { downloadReport } from '../lib/report.js';
-<<<<<<< HEAD
-import { kpiLabel, num, severityTone, titleCase, tone } from '../lib/format.js';
-=======
 import {
   GLOSSARY, deltaArrow, formatTime, humanize, kpiDelta, kpiLabel, kpiValue, measurementLabel, num, sentence, severityTone, tone,
 } from '../lib/format.js';
 import { scrollToEl } from '../lib/dom.js';
->>>>>>> 8e76fc51df2b89257fcaaa42a3addfd56ef357cc
 
 const statusCell = r => <Badge tone={tone(r.status)}>{r.status}</Badge>;
 const asText = v => sentence(v);
@@ -124,7 +120,6 @@ const WAYPOINT_COLUMNS = [
   { key: 'status', label: 'Status', render: statusCell },
 ];
 
-<<<<<<< HEAD
 const signed = v => `${v > 0 ? '+' : ''}${num(v, 1)}`;
 const range = ci => `${signed(ci[0])} to ${signed(ci[1])}`;
 
@@ -162,7 +157,9 @@ function Evidence({ detail }) {
       </div>
       <p className="muted">Average battery when a step started: V1 {num(battery.V1, 0)}%, V2 {num(battery.V2, 0)}%. {detail.method}</p>
     </>
-=======
+  );
+}
+
 const SECTIONS = [['ds-compare', 'Comparison'], ['ds-waypoints', 'Waypoints'], ['ds-model', 'Model'], ['ds-tables', 'Raw data']];
 
 /** "Improved ▼ −27.9 pp": the arrow is the real direction, the word says whether that is good. */
@@ -173,7 +170,6 @@ function Change({ k, d, verdict }) {
       {verdict === 'improved' || verdict === 'degraded' ? <span className="verdict">{verdict === 'improved' ? 'Improved' : 'Worse'}</span> : null}
       <span aria-hidden="true">{deltaArrow(d)}</span> {kpiDelta(k, d)}
     </td>
->>>>>>> 8e76fc51df2b89257fcaaa42a3addfd56ef357cc
   );
 }
 
@@ -234,11 +230,7 @@ function Outcomes({ compare }) {
 
 function ModelMetrics({ m, links }) {
   const t = m.test, cm = t.confusion_matrix;
-<<<<<<< HEAD
-  const rows = [[`${titleCase(m.model_type)} (selected)`, t], ...Object.entries(m.baselines || {}).map(([k, b]) => [k === 'battery_rule' ? `Rule: ${b.rule}` : k.replace(/_/g, ' '), b])];
-=======
-  const rows = [['Random forest (selected)', t], ...Object.entries(m.baselines || {}).map(([k, b]) => [k === 'battery_rule' ? `Rule: ${b.rule}` : sentence(k), b])];
->>>>>>> 8e76fc51df2b89257fcaaa42a3addfd56ef357cc
+  const rows = [[`${sentence(m.model_type)} (selected)`, t], ...Object.entries(m.baselines || {}).map(([k, b]) => [k === 'battery_rule' ? `Rule: ${b.rule}` : sentence(k), b])];
   return (
     <>
       <p className="lead">{m.target}. Threshold {m.decision_threshold}.</p>
