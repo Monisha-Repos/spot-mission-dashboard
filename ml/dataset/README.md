@@ -24,7 +24,7 @@ configs:
 
 One row per inspection action Spot attempted in the Knight Hacks 2026 SPOT challenge kit (synthetic, fictional data).
 Target: `failed` (1 when the action's status was FAILED). Every feature is known **before** the action runs.
-Used by the failure-risk model [<you>/spot-action-failure-risk](https://huggingface.co/<you>/spot-action-failure-risk).
+Used by the failure-risk model [Monisha-Natarajan/spot-action-failure-risk](https://huggingface.co/Monisha-Natarajan/spot-action-failure-risk).
 
 ## Splits
 
@@ -43,7 +43,7 @@ by mission; live = the last 4 IMPROVED missions by start time (never trained on,
 
 ```python
 from datasets import load_dataset
-ds = load_dataset("<you>/spot-mission-actions", revision="splits-v1")
+ds = load_dataset("Monisha-Natarajan/spot-mission-actions", revision="splits-v1")
 ```
 
 ## Columns

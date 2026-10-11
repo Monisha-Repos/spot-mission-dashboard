@@ -30,7 +30,7 @@ Built for the Knight Hacks 2026 SPOT Operational Intelligence Challenge, as part
 
 ## How it was evaluated
 
-- Fixed split by mission, published as [<your-username>/spot-mission-actions](https://huggingface.co/datasets/<your-username>/spot-mission-actions)
+- Fixed split by mission, published as [Monisha-Natarajan/spot-mission-actions](https://huggingface.co/datasets/Monisha-Natarajan/spot-mission-actions)
   (revision `splits-v1`): by mission; live = the last 4 IMPROVED missions by start time (never trained on, streamed in the demo); test = 1 of 5 StratifiedGroupKFold folds of the rest (stratified on scenario x outcome, seed 42); train = the remaining missions.
 - 180 training actions, 50 test actions (9 failures) from
   5 test missions, and 40 live actions from 4
@@ -99,7 +99,7 @@ Inference: 2.13 ms for one action, 0.013 ms per action in a batch (laptop CPU).
 import joblib, numpy as np
 from huggingface_hub import hf_hub_download
 
-bundle = joblib.load(hf_hub_download("<your-username>/spot-action-failure-risk", "model.joblib"))
+bundle = joblib.load(hf_hub_download("Monisha-Natarajan/spot-action-failure-risk", "model.joblib"))
 row = {"action_type": "NAVIGATION", "location_id": "WP05", "environment": "HIGH_NOISE", "zone_type": "MECHANICAL",
        "asset_type": "Heat Exchanger", "asset_criticality": "LOW", "configuration_version": "V2",
        "battery_pct": 35.0, "sequence": 1.0, "floor": 1.0}
