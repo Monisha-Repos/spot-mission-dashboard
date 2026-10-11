@@ -27,6 +27,9 @@
   --accent-text: #ffce3e;     /* Gold Text */
   --on-accent: #000000;
   --info: #29abe2;            /* Cyan Pulse */
+  --signal: #1ec8ff;          /* part hotspots and picked-part highlight */
+  --signal-halo: rgba(30, 200, 255, 0.35);
+  --signal-tint: rgba(30, 200, 255, 0.12);
   --link-hover: #3860be;      /* Link Blue */
   --ok: #2fbf62;
   --warn: #f28c28;
@@ -56,6 +59,9 @@
   --accent-text: #7a6000;     /* gold that passes contrast on white */
   --on-accent: #000000;
   --info: #1878a8;
+  --signal: #1565c0;          /* darker blue: the light blue washes out on white */
+  --signal-halo: rgba(21, 101, 192, 0.3);
+  --signal-tint: rgba(21, 101, 192, 0.1);
   --link-hover: #3860be;
   --ok: #1d8a42;
   --warn: #b85c00;
@@ -291,9 +297,7 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 .mission-facts span { white-space: nowrap; }
 .mission-facts span + span::before { content: "·"; margin: 0 8px; color: var(--muted); }
 .part-picker { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 20px; }
-/* Greyed out until hovered or picked, then lit in Cyan Pulse, the same as the robot's hotspot dots. */
-.part-picker { --signal: var(--info); --signal-tint: color-mix(in srgb, var(--info) 14%, transparent); }
-/* Hovering a chip or its hotspot on the robot lights both (.is-hover). */
+/* Greyed out until hovered or picked, then lit in the same blue as the robot's hotspot dots. */
 .part-picker .chip {
   background: color-mix(in srgb, var(--surface) 70%, transparent); color: var(--muted); border-color: var(--line);
   transition: color .15s, border-color .15s, background-color .15s;
