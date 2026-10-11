@@ -24,12 +24,12 @@
   background: var(--signal-h);
   animation: hotspot-halo 3s ease-out infinite;
 }
-@keyframes hotspot-halo {
-  from { transform: scale(1); opacity: .8; }
-  to { transform: scale(2.6); opacity: 0; }
+@keyframes hotspot-pulse {
+  from { transform: scale(1); opacity: .45; }
+  to { transform: scale(2.4); opacity: 0; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .hotspot-dot::after { animation: none; opacity: 0; }
+  .hotspot::after { animation: none; }
 }
 .hotspot-label {
   /* Out of the flow so the button is exactly the dot, which the viewer centres on the anchor. */

@@ -31,6 +31,7 @@ export default function SpotViewer({
   autoRotate = false, wireframe = false, showGrid = true, quality = 'balanced',
   view = 'perspective', resetKey = 0, onStats,
   theme = 'dark', hotspots = false, focusPart = null, onPartSelect, partStatus = {},
+  hoverPart = null, onPartHover, // shared hover highlight with the part buttons outside the canvas
   shiftX = 0, // move the robot sideways on screen, as a fraction of the width (+ is right)
 }) {
   const host = useRef(null);
@@ -342,8 +343,12 @@ export default function SpotViewer({
           key={id}
           ref={el => { markers.current[id] = el; }}
           type="button"
-          className={`hotspot tone-${partStatus[id] || 'muted'}${focusPart === id ? ' is-active' : ''}`}
+          className={`hotspot tone-${partStatus[id] || 'muted'}${focusPart === id ? ' is-active' : ''}${hoverPart === id ? ' is-hover' : ''}`}
           onClick={() => onPartSelect?.(focusPart === id ? null : id)}
+          onMouseEnter={() => onPartHover?.(id)}
+          onMouseLeave={() => onPartHover?.(null)}
+          onFocus={() => onPartHover?.(id)}
+          onBlur={() => onPartHover?.(null)}
           aria-pressed={focusPart === id}
           aria-label={`${part.label}: show what it measured`}
         >

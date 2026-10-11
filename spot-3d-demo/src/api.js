@@ -41,9 +41,28 @@ export async function api(path, { method = 'GET', body, token } = {}) {
 
 export const asset = path => (path ? API_URL + path : '');
 
-/** Shared app state: a data version that bumps on every live mission, and the operator session. */
-export const AppContext = createContext({ version: 0, bump() {}, session: null, setSession() {} });
+/**
+ * Shared app state: a data version that bumps on every live mission, the operator session,
+ * notify(message) for brief success toasts, and go(tab, extra) to switch views.
+ */
+export const AppContext = createContext({ version: 0, bump() {}, session: null, setSession() {}, notify() {}, go() {} });
 export const useApp = () => useContext(AppContext);
+
+// When data last loaded successfully, so the top bar can say how fresh the dashboard is.
+let lastRefresh = null;
+const refreshListeners = new Set();
+function markRefreshed() {
+  lastRefresh = new Date();
+  refreshListeners.forEach(fn => fn(lastRefresh));
+}
+export function useLastRefresh() {
+  const [at, setAt] = useState(lastRefresh);
+  useEffect(() => {
+    refreshListeners.add(setAt);
+    return () => { refreshListeners.delete(setAt); };
+  }, []);
+  return at;
+}
 
 /** GET a path and re-fetch whenever the data version changes (live missions, writes). */
 export function useApi(path) {
@@ -55,7 +74,7 @@ export function useApi(path) {
     let alive = true;
     setState(s => ({ ...s, loading: true }));
     api(path).then(
-      data => alive && setState({ data, error: null, loading: false }),
+      data => { markRefreshed(); if (alive) setState({ data, error: null, loading: false }); },
       error => alive && setState(s => ({ data: s.data, error, loading: false })),
     );
     return () => { alive = false; };

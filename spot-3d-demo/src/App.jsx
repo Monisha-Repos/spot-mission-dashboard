@@ -1,17 +1,24 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { AppContext, loadSession, saveSession } from './api.js';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
+import { AppContext, loadSession, saveSession, useLastRefresh } from './api.js';
 import Overview from './tabs/Overview.jsx';
 import Replay from './tabs/Replay.jsx';
 import DataScientist from './tabs/DataScientist.jsx';
 import OpsConsole from './modules/ops/OpsConsole.jsx';
 import AskPanel from './components/AskPanel.jsx';
 import AlarmCenter from './components/AlarmCenter.jsx';
+import { BackToTop, Toasts } from './components/ui.jsx';
 import { createSiren } from './lib/siren.js';
+<<<<<<< HEAD
 import { LiveProvider } from './live/LiveContext.jsx';
 import { LiveBadge } from './live/LiveViews.jsx';
+=======
+import { scrollToEl } from './lib/dom.js';
+>>>>>>> 8e76fc51df2b89257fcaaa42a3addfd56ef357cc
 
 const TABS = [['overview', 'Overview'], ['replay', 'Replay'], ['analysis', 'Data Analysis'], ['operator', 'Operator']];
 const PLAIN_TABS = ['overview', 'replay'];
+const STREAM_LABEL = { live: 'Live updates on', offline: 'Live updates offline', connecting: 'Connecting to live updates…' };
 
 function stored(key, fallback, allowed) {
   try {
@@ -21,6 +28,18 @@ function stored(key, fallback, allowed) {
 }
 function store(key, value) {
   try { localStorage.setItem(key, value); } catch { /* storage blocked: preference lasts this visit */ }
+}
+const clock = d => d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+
+/** Wait (up to ~3 s) for an element that renders once its data loads, then scroll to it. */
+function scrollWhenReady(id, onFound) {
+  let tries = 0;
+  const step = () => {
+    const el = document.getElementById(id);
+    if (el) { scrollToEl(el); onFound?.(el); return; }
+    if (++tries < 180) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
 }
 
 export default function App() {
@@ -34,10 +53,48 @@ export default function App() {
   const [session, setSessionState] = useState(loadSession);
   const [context, setContext] = useState({ floor: 1 });
   const [replayMission, setReplayMission] = useState(null);
-  const openReplay = useCallback(id => { if (id) setReplayMission(id); setTab('replay'); }, []);
   const [siren, setSiren] = useState(null);
   const [muted, setMuted] = useState(false);
   const [alarm, setAlarm] = useState(false);
+<<<<<<< HEAD
+=======
+  const [stream, setStream] = useState('connecting');
+  const [toasts, setToasts] = useState([]);
+  const refreshed = useLastRefresh();
+  const topbar = useRef(null);
+
+  // Each view opens at the top the first time, then comes back where it was left.
+  const positions = useRef({});
+  const pendingScroll = useRef(null);
+  const tabRef = useRef(tab);
+  tabRef.current = tab;
+  const switchTab = useCallback((id, scrollTo) => {
+    if (id === tabRef.current) { if (scrollTo) scrollWhenReady(scrollTo); return; }
+    positions.current[tabRef.current] = window.scrollY;
+    pendingScroll.current = scrollTo || null;
+    setTab(id);
+  }, []);
+  useLayoutEffect(() => {
+    const target = pendingScroll.current;
+    pendingScroll.current = null;
+    window.scrollTo({ top: positions.current[tab] ?? 0, behavior: 'instant' });
+    if (target) scrollWhenReady(target);
+  }, [tab]);
+
+  /** Jump to a view, optionally selecting a run / waypoint / part and scrolling to a section id. */
+  const go = useCallback((id, { mission, waypoint, floor, part, scrollTo } = {}) => {
+    if (mission) setReplayMission(mission);
+    if (waypoint || part || floor) setContext(c => ({ ...c, ...(floor ? { floor } : {}), ...(waypoint ? { waypoint } : {}), ...(part ? { part } : {}) }));
+    switchTab(id, scrollTo);
+  }, [switchTab]);
+  const openReplay = useCallback(id => go('replay', { mission: id }), [go]);
+
+  const notify = useCallback(text => {
+    const id = Date.now() + Math.random();
+    setToasts(t => [...t.slice(-2), { id, text }]);
+    setTimeout(() => setToasts(t => t.filter(x => x.id !== id)), 3200);
+  }, []);
+>>>>>>> 8e76fc51df2b89257fcaaa42a3addfd56ef357cc
 
   useEffect(() => {
     const { pathname, search } = window.location;
@@ -48,10 +105,31 @@ export default function App() {
     document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'dark' ? '#000000' : '#f8f8f8');
     store('spot.theme', theme);
   }, [theme]);
+  // The header wraps onto two rows on small screens; section jumps and sticky bars use its real height.
+  useEffect(() => {
+    const el = topbar.current;
+    if (!el) return undefined;
+    const set = () => document.documentElement.style.setProperty('--topbar-h', `${el.offsetHeight}px`);
+    set();
+    const ro = new ResizeObserver(set);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   const bump = useCallback(() => setVersion(v => v + 1), []);
   const setSession = useCallback(s => { saveSession(s); setSessionState(s); }, []);
-  const app = useMemo(() => ({ version, bump, session, setSession }), [version, bump, session, setSession]);
+  const app = useMemo(() => ({ version, bump, session, setSession, notify, go }), [version, bump, session, setSession, notify, go]);
+
+  // Crossfade the theme swap where the browser supports view transitions; otherwise switch instantly.
+  function toggleTheme() {
+    const next = theme === 'dark' ? 'light' : 'dark';
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (!document.startViewTransition || reduce) { setTheme(next); return; }
+    document.startViewTransition(() => {
+      document.documentElement.dataset.theme = next;
+      flushSync(() => setTheme(next));
+    });
+  }
 
   function arm() {
     if (siren) { setMuted(m => !m); return; }
@@ -59,32 +137,45 @@ export default function App() {
     if (s) { s.test(); setSiren(s); }
   }
 
+  const streamText = STREAM_LABEL[stream] || STREAM_LABEL.connecting;
   return (
     <AppContext.Provider value={app}>
       <LiveProvider>
       <a className="skip" href="#main">Skip to content</a>
       <div className="app" inert={alarm}>
-        <header className="topbar">
-          <a className="brand" href="/overview" aria-label="spotat.work home" onClick={e => { e.preventDefault(); setTab('overview'); }}>
+        <header className="topbar" ref={topbar}>
+          <a className="brand" href="/overview" aria-label="spotat.work home" onClick={e => { e.preventDefault(); switchTab('overview'); }}>
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 2h10l5 10-5 10H7L2 12z" /></svg>
             <span>spotat<b>.</b>work</span>
           </a>
           <nav className="tabs" aria-label="Views">
             {TABS.map(([id, label]) => (
-              <button key={id} type="button" className={tab === id ? 'is-on' : ''} aria-current={tab === id ? 'page' : undefined} onClick={() => setTab(id)}>
+              <button key={id} type="button" className={tab === id ? 'is-on' : ''} aria-current={tab === id ? 'page' : undefined} onClick={() => switchTab(id)}>
                 {label}
               </button>
             ))}
           </nav>
           <div className="topbar-tools">
+<<<<<<< HEAD
             <LiveBadge />
+=======
+            <span className="status">
+              <span
+                className={`live live-${stream}`}
+                title={`${streamText}. This is only the live mission feed; recorded data keeps working without it.`}
+              >
+                <i aria-hidden="true" /><span className="live-text">{streamText}</span>
+              </span>
+              {refreshed && <span className="refreshed" title="Last time data loaded from the backend">Data updated {clock(refreshed)}</span>}
+            </span>
+>>>>>>> 8e76fc51df2b89257fcaaa42a3addfd56ef357cc
             <button type="button" className={`btn btn-sm ${siren ? 'btn-ghost' : 'btn-accent'}`} onClick={arm} aria-pressed={siren ? muted : undefined}>
               {!siren ? 'Arm alarms 📢' : muted ? 'Unmute' : 'Mute'}
             </button>
             <button
               type="button"
               className="icon-btn theme-toggle"
-              onClick={() => setTheme(t => (t === 'dark' ? 'light' : 'dark'))}
+              onClick={toggleTheme}
               aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
               title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
             >
@@ -95,7 +186,7 @@ export default function App() {
           </div>
         </header>
 
-        <main id="main" className={`main main-${tab}`}>
+        <main id="main" className={`main main-${tab}`} tabIndex={-1}>
           {tab === 'overview' && <Overview theme={theme} context={context} setContext={setContext} onReplay={openReplay} />}
           {tab === 'replay' && <Replay missionId={replayMission} onMission={setReplayMission} />}
           {tab === 'analysis' && <DataScientist />}
@@ -111,9 +202,16 @@ export default function App() {
           mode={PLAIN_TABS.includes(tab) ? 'simple' : 'technical'}
           context={tab === 'overview' ? context : tab === 'replay' ? { mission: replayMission } : {}}
         />
+        {/* Right after the assistant so CSS can hide it while the assistant panel is open. */}
+        <BackToTop />
       </div>
+<<<<<<< HEAD
       <AlarmCenter siren={siren} muted={muted} onMute={() => setMuted(m => !m)} onActive={setAlarm} />
       </LiveProvider>
+=======
+      <Toasts items={toasts} />
+      <AlarmCenter siren={siren} muted={muted} onMute={() => setMuted(m => !m)} onActive={setAlarm} onStream={setStream} />
+>>>>>>> 8e76fc51df2b89257fcaaa42a3addfd56ef357cc
     </AppContext.Provider>
   );
 }

@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { api, asset, useApi, useApp } from '../api.js';
 import { useLive } from '../live/LiveContext.jsx';
 import { FloorPlane } from './InclinedMap.jsx';
+import { ZoomImg } from './ui.jsx';
 import LoginForm from '../modules/ops/LoginForm.jsx';
 import { formatTime, humanize, measurementLabel, num, reading, titleCase } from '../lib/format.js';
 
@@ -36,9 +37,14 @@ function fromEvent(a, waypoints, assets) {
   };
 }
 
+<<<<<<< HEAD
 export default function AlarmCenter({ siren, muted, onMute, onActive }) {
   const { session, bump } = useApp();
   const live = useLive();
+=======
+export default function AlarmCenter({ siren, muted, onMute, onActive, onStream }) {
+  const { session, bump, notify } = useApp();
+>>>>>>> 8e76fc51df2b89257fcaaa42a3addfd56ef357cc
   const pending = useApi('/ops/alerts?pending=true');
   const waypoints = useApi('/waypoints');
   const assets = useApi('/assets');
@@ -99,6 +105,7 @@ export default function AlarmCenter({ siren, muted, onMute, onActive }) {
     setError('');
     try {
       await api(`/ops/alerts/${current.anomaly_id}/decision`, { method: 'POST', body: { decision, note }, token: session?.token });
+      notify(decision === 'DANGER' ? 'Marked as danger' : 'Alarm overridden');
       setDone(d => new Set(d).add(current.anomaly_id));
       live.dismiss([current.anomaly_id]);
       setIndex(0);
@@ -156,8 +163,8 @@ export default function AlarmCenter({ siren, muted, onMute, onActive }) {
               </div>
             )}
             <figure className="evidence evidence-sm">
-              <img src={asset(current.image)} alt={`Reference image for ${humanize(current.type)}`} />
-              <figcaption>Reference image (not a live capture)</figcaption>
+              <ZoomImg src={asset(current.image)} alt={`Reference image for ${humanize(current.type)}`} />
+              <figcaption>Reference image (not a live capture) · click to enlarge</figcaption>
             </figure>
           </div>
         </div>
@@ -177,8 +184,8 @@ export default function AlarmCenter({ siren, muted, onMute, onActive }) {
               <input value={note} onChange={e => setNote(e.target.value)} maxLength={1000} placeholder={`Decision by ${session.name}`} />
             </label>
             <div className="alarm-buttons">
-              <button type="button" className="btn btn-ghost" disabled={busy || !note.trim()} onClick={() => decide('OVERRIDE')}>✅ Not a problem (override)</button>
-              <button type="button" className="btn btn-danger" disabled={busy} onClick={() => decide('DANGER')}>🚨 Mark as danger</button>
+              <button type="button" className="btn btn-ghost" disabled={busy || !note.trim()} onClick={() => decide('OVERRIDE')}>Not a problem (override)</button>
+              <button type="button" className="btn btn-danger" disabled={busy} onClick={() => decide('DANGER')}>Mark as danger</button>
             </div>
           </div>
         ) : (
