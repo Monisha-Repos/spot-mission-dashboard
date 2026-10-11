@@ -1180,3 +1180,18 @@ body:has(.stream-bubble, .stream-dialog) .toasts { bottom: 96px; }
 /* Assistant: numbered references in answers, matching the numbered source list. */
 .cite-ref { margin-left: 2px; padding: 0 4px; font-size: 10px; line-height: 1; color: var(--signal); border: 1px solid color-mix(in srgb, var(--signal) 45%, transparent); vertical-align: super; cursor: help; }
 .cite-n { display: inline-grid; place-items: center; min-width: 18px; height: 18px; margin-right: 6px; font-size: 11px; color: var(--signal); border: 1px solid color-mix(in srgb, var(--signal) 45%, transparent); flex: none; }
+
+/* Assistant docked as a side panel (after it opens a map, part or run, or with the dock button): the page sits beside
+   it instead of underneath. On narrow screens it stays a pop-out. */
+:root { --ask-dock: 400px; }
+.ask-head-tools { display: inline-flex; gap: 8px; align-items: flex-start; }
+@media (min-width: 900px) {
+  .ask.is-docked { top: var(--topbar-h, var(--top)); right: 0; bottom: 0; display: block; }
+  .ask.is-docked .ask-panel { width: var(--ask-dock); height: 100%; border-width: 0 0 0 1px; animation: dock-in .25s ease-out; }
+  .ask.is-docked .ask-fab { display: none; }
+  body:has(.ask.is-docked) .app > main, body:has(.ask.is-docked) .app > footer { margin-right: var(--ask-dock); transition: margin-right .25s ease-out; }
+  body:has(.ask.is-docked) .decision, body:has(.ask.is-docked) .decision-chip { right: calc(var(--ask-dock) + 24px); }
+  body:has(.ask.is-docked) .to-top { display: none; }
+}
+@media (max-width: 899px) { .ask-dock { display: none; } }
+@keyframes dock-in { from { transform: translateX(24px); opacity: 0; } }

@@ -72,6 +72,8 @@ function Citation({ c, n, onOpen }) {
 export default function AskPanel({ mode, context }) {
   const { go } = useApp();
   const [open, setOpen] = useState(false);
+  // Docked: a full-height side panel with the page beside it, so a map or part the chat opened stays in view.
+  const [docked, setDocked] = useState(false);
   const [messages, setMessages] = useState([]);
   const [question, setQuestion] = useState('');
   const [busy, setBusy] = useState(false);
@@ -98,6 +100,7 @@ export default function AskPanel({ mode, context }) {
   }
   function close() {
     setOpen(false);
+    setDocked(false);
     fab.current?.focus();
   }
 
@@ -122,7 +125,7 @@ export default function AskPanel({ mode, context }) {
 
   const where = contextLabel(context || {});
   return (
-    <div className={`ask${open ? ' is-open' : ''}`}>
+    <div className={`ask${open ? ' is-open' : ''}${open && docked ? ' is-docked' : ''}`}>
       {open && (
         <section className="ask-panel" role="dialog" aria-label="AI assistant" onKeyDown={e => { if (e.key === 'Escape') close(); }}>
           <header className="ask-head">
@@ -130,7 +133,16 @@ export default function AskPanel({ mode, context }) {
               <p className="eyebrow">AI assistant · {mode === 'technical' ? 'technical' : 'plain language'}</p>
               {where && <p className="ask-context">Looking at: {where}</p>}
             </div>
-            <button type="button" className="icon-btn" onClick={close} aria-label="Close assistant">✕</button>
+            <span className="ask-head-tools">
+              <button type="button" className="icon-btn ask-dock" onClick={() => setDocked(d => !d)} aria-pressed={docked}
+                aria-label={docked ? 'Pop the assistant out' : 'Dock the assistant to the side'}
+                title={docked ? 'Pop out' : 'Dock to the side, next to the page'}>
+                {docked
+                  ? <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" /><path d="M11 13h6v5h-6z" /></svg>
+                  : <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" /><path d="M14 4v16" /></svg>}
+              </button>
+              <button type="button" className="icon-btn" onClick={close} aria-label="Close assistant">✕</button>
+            </span>
           </header>
           <div className="ask-log" ref={log} aria-live="polite" onScroll={onScroll}>
             {!messages.length && (
@@ -147,7 +159,7 @@ export default function AskPanel({ mode, context }) {
                 )}
                 {m.citations?.length > 0 && (
                   <ul className="citations" aria-label="Sources">
-                    {m.citations.slice(0, 8).map((c, i) => <Citation key={c.id} c={c} n={i + 1} onOpen={t => go(t.tab, t.opts)} />)}
+                    {m.citations.slice(0, 8).map((c, i) => <Citation key={c.id} c={c} n={i + 1} onOpen={t => { setDocked(true); go(t.tab, t.opts); }} />)}
                   </ul>
                 )}
               </div>
