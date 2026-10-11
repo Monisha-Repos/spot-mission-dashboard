@@ -1,18 +1,15 @@
 # Render Blueprint: the backend container (Dockerfile). The frontend (spot-3d-demo/) is deployed on Vercel.
-# The 1 GB disk keeps ops.db (issues, audit trail, snapshots) across restarts and redeploys.
+# Free plan: no disk, so ops.db (Operator Console issues, audit trail, snapshots) resets when the service restarts
+# or wakes from sleep. Mission data is safe in Databricks. For durable ops.db: plan starter + a disk at /var/data.
 services:
   - type: web
     name: spot-mission-api
     runtime: docker
-    plan: starter
+    plan: free
     dockerfilePath: ./Dockerfile
     healthCheckPath: /health
-    disk:
-      name: spot-data
-      mountPath: /var/data
-      sizeGB: 1
     envVars:
-      # Mission data: the Databricks lakehouse both APIs read and write. ops.db stays on the disk.
+      # Mission data: the Databricks lakehouse both APIs read and write.
       - key: SINK
         value: databricks
       - key: DATABRICKS_HOST
