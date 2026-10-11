@@ -74,8 +74,9 @@ def improvement(ds: Dataset) -> dict:
             return _cache[key]
     result = _improvement(ds)
     with _lock:
-        _cache.clear()
         _cache[key] = result
+        while len(_cache) > 8:  # shared data plus a few sandbox views
+            _cache.pop(next(iter(_cache)))
     return result
 
 

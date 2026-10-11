@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState } from 'react';
-import { api, INGEST_URL, useApp } from '../api.js';
+import { api, INGEST_URL, setSandboxMissions, useApp } from '../api.js';
 
 /**
  * Everything live, in one place, for both modes:
@@ -76,6 +76,9 @@ export function LiveProvider({ children }) {
   const [sandbox, setSandbox] = useState(null); // { state, speed, mission_index, mission_total, message }
   const [run, dispatch] = useReducer(runReducer, EMPTY_RUN);
   const [alerts, setAlerts] = useState({});
+  // Missions the sandbox has finished: every view includes them (only in this browser).
+  const [sandboxDone, setSandboxDone] = useState([]);
+  const includeSandbox = useCallback(ids => { setSandboxMissions(ids); setSandboxDone(ids); bump(); }, [bump]);
   const player = useRef({ timer: 0, script: null, mi: 0, ei: 0 });
   const sandboxRef = useRef(null);
   sandboxRef.current = sandbox;
@@ -163,6 +166,7 @@ export function LiveProvider({ children }) {
     onEvent({ ...event, live_at: new Date().toISOString(), speed: s.speed, sandbox: true }, true);
     if (event.type === 'MISSION_STARTED') setSandbox(x => ({ ...x, mission_index: p.mi + 1, message: `${event.mission_id} started (${p.mi + 1} of ${p.script.missions.length}).` }));
     p.ei += 1;
+    if (event.type === 'MISSION_COMPLETED') includeSandbox(p.script.missions.slice(0, p.mi + 1).map(m => m.mission_id));
     if (event.alarm && s.pause_on_alarm) {
       setSandbox(x => ({ ...x, state: 'waiting_for_decision', waiting_for: event.details.anomaly_id,
         message: `Waiting for your decision on ${event.details.anomaly_id}.` }));
@@ -176,7 +180,7 @@ export function LiveProvider({ children }) {
     }
     const gap = (mission.events[p.ei].offset_sec - event.offset_sec) * 1000 / s.speed;
     schedule(Math.min(Math.max(gap, 0), MAX_GAP_MS));
-  }, [onEvent, schedule]);
+  }, [onEvent, schedule, includeSandbox]);
   stepRef.current = step;
 
   // Resume the player whenever the sandbox goes back to running.
@@ -191,11 +195,12 @@ export function LiveProvider({ children }) {
     const script = player.current.script || await api('/live/script');
     player.current = { timer: 0, script, mi: 0, ei: 0 };
     dispatch({ type: 'reset' });
+    includeSandbox([]);
     setAlerts(a => Object.fromEntries(Object.entries(a).filter(([, v]) => !v.sandbox)));
     setSandbox({ state: 'running', speed, pause_on_alarm: pauseOnAlarm, waiting_for: null, mission_index: 0,
       mission_total: script.missions.length,
       message: `Sandbox: ${script.missions.length} missions at ×${speed}. Only you see this; nothing is saved.` });
-  }, []);
+  }, [includeSandbox]);
 
   const sandboxControl = useCallback(action => {
     setSandbox(s => {
@@ -208,9 +213,10 @@ export function LiveProvider({ children }) {
     if (action === 'stop') {
       clearTimeout(player.current.timer);
       dispatch({ type: 'reset' });
+      includeSandbox([]);
       setAlerts(a => Object.fromEntries(Object.entries(a).filter(([, v]) => !v.sandbox)));
     }
-  }, []);
+  }, [includeSandbox]);
 
   const setSandboxSpeed = useCallback(speed => setSandbox(s => (s ? { ...s, speed } : s)), []);
 
@@ -250,11 +256,11 @@ export function LiveProvider({ children }) {
   const mode = sandboxActive || (sandbox && !presenterActive) ? 'sandbox' : presenterActive ? 'presenter' : null;
   const status = mode === 'sandbox' ? sandbox : presenter;
   const value = useMemo(() => ({
-    stream, presenter, sandbox, run, mode, status, alerts,
+    stream, presenter, sandbox, run, mode, status, alerts, sandboxDone,
     active: mode === 'sandbox' ? sandboxActive : presenterActive,
     presenterActive, sandboxActive,
     startSandbox, sandboxControl, setSandboxSpeed, resolveLocal, dismiss, testAlert,
-  }), [stream, presenter, sandbox, run, mode, status, alerts, sandboxActive, presenterActive,
+  }), [stream, presenter, sandbox, run, mode, status, alerts, sandboxDone, sandboxActive, presenterActive,
     startSandbox, sandboxControl, setSandboxSpeed, resolveLocal, dismiss, testAlert]);
   return <LiveContext.Provider value={value}>{children}</LiveContext.Provider>;
 }

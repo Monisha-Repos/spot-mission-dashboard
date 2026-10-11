@@ -400,6 +400,30 @@ class Report {
     }
   }
 
+  /** The AI's read of the new data against the baseline, and of the model on new missions (GET /report/summary). */
+  aiReview() {
+    const { summary, sandbox } = this.in;
+    if (!summary?.text) return;
+    const byAI = summary.provider && summary.provider !== 'none';
+    this.chapter('AI review', 'New data vs baseline', byAI
+      ? `Written by the AI assistant (${clean(summary.model || summary.provider)}) from the figures computed for this report. It was told to use only those figures and add nothing of its own.`
+      : 'Generated from the figures computed for this report. No AI model is configured on the server, so the figures are given as they are.');
+    if (sandbox?.length) {
+      const note = `Includes a sandbox replay of ${plural(sandbox.length, 'new mission')} (${sandbox.join(', ')}) from this browser; they are not in the shared data.`;
+      const h = this.paraHeight(note, CW - 20, 8.3);
+      this.rect(PAGE.m, this.y, CW, h + 14, C.near);
+      this.rect(PAGE.m, this.y, 3, h + 14, C.gold);
+      this.para(note, PAGE.m + 12, this.y + 13, CW - 20, { size: 8.3, color: C.charcoal });
+      this.y += h + 26;
+    }
+    for (const p of String(summary.text).split(/\n\s*\n/).map(s => s.trim()).filter(Boolean)) {
+      const h = this.paraHeight(p, CW, 10.5, 1.5);
+      this.ensure(h + 12);
+      this.para(p, PAGE.m, this.y + 6, CW, { size: 10.5, color: C.black, lh: 1.5 });
+      this.y += h + 14;
+    }
+  }
+
   attentionItem(r) {
     const sev = r.anomaly?.severity;
     const color = SEV[sev] || TONE[r.status] || C.bad;
@@ -476,6 +500,29 @@ class Report {
       this.table(['Measure', 'V1 baseline', 'V2 improved', 'p-value', 'Verdict', 'Method'],
         Object.entries(compare.tests).map(([key, t]) => [humanize(key), frac(t.V1), frac(t.V2), n1(t.p_value), t.p_value < 0.05 ? 'Real difference' : 'Could be chance', t.method]),
         { colorCol: 4, colorFn: v => (v === 'Real difference' ? C.ok : C.ash), columnStyles: { 3: { halign: 'right' } } });
+    }
+
+    const d = compare?.detail;
+    if (d?.available) {
+      const sg = v => `${v > 0 ? '+' : ''}${(+v).toFixed(1)}`;
+      const rng = ci => `${sg(ci[0])} to ${sg(ci[1])}`;
+      const verdict = ci => (ci[0] > 0 ? 'V2 better' : ci[1] < 0 ? 'V2 worse' : 'Could be chance');
+      const rows = [['As observed', `${pct(d.raw.V1.success_pct)} (${pct(d.raw.V1.ci95[0])}-${pct(d.raw.V1.ci95[1])})`,
+        `${pct(d.raw.V2.success_pct)} (${pct(d.raw.V2.ci95[0])}-${pct(d.raw.V2.ci95[1])})`, sg(d.gap.points), rng(d.gap.ci95), verdict(d.gap.ci95)]];
+      if (d.adjusted) {
+        rows.push([`Like for like (${d.adjusted.controls.join(', ')} the same)`, pct(d.adjusted.success_pct_if_all_v1), pct(d.adjusted.success_pct_if_all_v2),
+          sg(d.adjusted.points), rng(d.adjusted.ci95), verdict(d.adjusted.ci95)]);
+      }
+      this.heading('Is it the setup or the conditions?', 'Action success with 95% ranges from resampling whole missions, then compared like for like. If the gap disappears like for like, the change came with the conditions V2 ran in rather than the setup itself.', 90);
+      this.table(['Comparison', 'V1 baseline', 'V2 improved', 'Gap (pts)', '95% range', 'Verdict'], rows,
+        { colorCol: 5, colorFn: v => (v === 'V2 better' ? C.ok : v === 'V2 worse' ? C.bad : C.ash), columnStyles: { 3: { halign: 'right' } } });
+      const b = d.avg_battery_at_action_pct;
+      if (b) {
+        const line = `Average battery when a check started: V1 ${pct(b.V1, 0)}, V2 ${pct(b.V2, 0)}.`;
+        this.ensure(20);
+        this.para(line, PAGE.m, this.y + 6, CW, { size: 8.3, color: C.graphite });
+        this.y += 22;
+      }
     }
   }
 
@@ -687,6 +734,31 @@ class Report {
           Object.entries(cv.candidates).map(([name, c]) => [humanize(name), `${n1(c.pr_auc_mean)} +/- ${n1(c.pr_auc_std)}`, `${n1(c.f1_mean)} +/- ${n1(c.f1_std)}`, n1(c.threshold), name === cv.selected ? 'Yes' : '']),
           { colorCol: 4, colorFn: v => (v === 'Yes' ? C.goldText : null) });
       }
+
+      const l = this.in.modelLive;
+      if (l?.available) {
+        this.heading('On new missions it never saw', 'The last IMPROVED missions are kept out of training and scored as they arrive: the honest test of whether the model works on new data.', 110);
+        const sh = this.paraHeight(l.summary, CW, 9);
+        this.ensure(sh + 8);
+        this.para(l.summary, PAGE.m, this.y + 6, CW, { size: 9, color: C.black });
+        this.y += sh + 14;
+        if (l.arrived?.length) {
+          this.tiles([
+            { label: 'Missions arrived', value: `${l.arrived.length} of ${l.live_missions.length}` },
+            { label: 'Failures caught', value: `${l.model.caught} of ${l.failures}`, tone: l.model.caught ? C.ok : C.warn },
+            { label: 'False alarms', value: `${l.model.false_alarms}` },
+            l.ranking ? { label: 'PR-AUC', value: n1(l.ranking.pr_auc), sub: `${pct(l.ranking.base_rate * 100)} = chance` } : { label: 'Battery rule caught', value: `${l.battery_rule?.caught ?? '-'}` },
+          ], 4, 70);
+        }
+        if (l.drift) {
+          const h = this.paraHeight(l.drift, CW - 20, 8.5);
+          this.ensure(h + 20);
+          this.rect(PAGE.m, this.y, CW, h + 16, C.near);
+          this.rect(PAGE.m, this.y, 3, h + 16, C.warn);
+          this.para(l.drift, PAGE.m + 12, this.y + 14, CW - 20, { size: 8.5, color: C.charcoal });
+          this.y += h + 26;
+        }
+      }
     }
 
     if (ops) {
@@ -725,6 +797,7 @@ class Report {
   render() {
     this.cover();
     this.atAGlance();
+    this.aiReview();
     this.performance();
     this.where();
     this.history();
@@ -736,7 +809,8 @@ class Report {
 
 /**
  * Builds the report. kpis: { all, V1, V2 } from compute_kpis (GET /summary or a snapshot). Everything else is
- * optional and its section is skipped when missing: compare, metrics, waypoints, missions, insights,
+ * optional and its section is skipped when missing: compare (with detail), metrics, modelLive (GET /model/live),
+ * summary (GET /report/summary), sandbox (mission ids replayed in this browser), waypoints, missions, insights,
  * attention (records), ops, kind ('report' | 'snapshot'), asOf, note.
  */
 export async function buildReport(input) {

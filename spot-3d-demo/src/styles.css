@@ -1151,3 +1151,9 @@ body:has(.stream-bubble, .stream-dialog) .toasts { bottom: 96px; }
   .decision { animation: none; }
   .packet { display: none; }
 }
+
+/* Sandbox data included in the views: a calm strip under the top bar with the way back. */
+.sandbox-notice { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin: 0; padding: 10px var(--gutter); font-size: 13px; line-height: 1.5;
+  background: color-mix(in srgb, var(--signal) 10%, var(--surface)); border-bottom: 1px solid color-mix(in srgb, var(--signal) 35%, var(--line)); }
+.sandbox-notice > span:nth-child(2) { flex: 1 1 320px; }
+.sandbox-notice-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--signal); flex: none; }

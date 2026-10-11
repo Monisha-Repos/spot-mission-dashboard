@@ -8,7 +8,9 @@ Interactive docs: http://localhost:8000/docs
 """
 from __future__ import annotations
 
+import contextvars
 import logging
+import re
 import threading
 from contextlib import asynccontextmanager
 from typing import Literal
@@ -26,6 +28,9 @@ from .risk import RiskModel
 from .store import DataStore
 
 log = logging.getLogger("spot")
+
+# Kit missions this request's browser has replayed in the sandbox (?sandbox=M019,M020); its views include them.
+SANDBOX = contextvars.ContextVar("sandbox", default=())
 
 
 class ChatTurn(BaseModel):
@@ -80,6 +85,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app = FastAPI(title="SPOT Mission Dashboard API", version="1.0.0", lifespan=lifespan,
                   description="Mission data, inspection records, insights, AI assistant, failure-risk model and the Operator Console.")
     app.add_middleware(CORSMiddleware, allow_origins=settings.cors_origins, allow_methods=["*"], allow_headers=["*"])
+
+    @app.middleware("http")
+    async def sandbox_scope(request, call_next):
+        raw = request.query_params.get("sandbox", "")
+        token = SANDBOX.set(tuple(sorted({m for m in raw.split(",") if re.fullmatch(r"M\d{3}", m)}))[:20])
+        try:
+            return await call_next(request)
+        finally:
+            SANDBOX.reset(token)
     if settings.assets_dir.exists():
         # Floor plans and inspection images: /static/maps/..., /static/inspection-images/...
         app.mount("/static", StaticFiles(directory=settings.assets_dir), name="static")
@@ -87,7 +101,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     def data():
         try:
-            return store.dataset
+            return store.dataset_with(ids) if (ids := SANDBOX.get()) else store.dataset
         except LakehouseError as e:
             raise HTTPException(503, f"lakehouse unavailable: {e}") from None
 
@@ -259,6 +273,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "explanation": (f"{risk:.0%} chance this {domain.ACTION_LABELS[body.action_type]} of {a['asset_name']} at "
                                 f"{loc['location_name']} fails" + (" - above the alert threshold." if flagged else ".")),
                 "model": risk_model.info}
+
+    @app.get("/report/summary", tags=["assistant"])
+    def report_summary(request: Request):
+        """The PDF's AI review: how the new (V2) data compares with the baseline and how the model did on new missions."""
+        client = (request.headers.get("x-forwarded-for", "").split(",")[0].strip()
+                  or (request.client.host if request.client else "anonymous"))
+        return assistant.report_summary(data(), metrics(), client=client)
 
     @app.post("/ask", tags=["assistant"])
     def ask(body: AskRequest, request: Request):

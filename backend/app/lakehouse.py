@@ -30,6 +30,11 @@ def load_tables(settings: Settings) -> tuple[dict[str, list[dict]], str]:
     return {t: [_typed(r) for r in _read_csv(folder / f"{t}.csv")] for t in TABLES}, f"{settings.lakehouse} {folder}"
 
 
+def load_kit_tables(settings: Settings) -> dict[str, list[dict]]:
+    """The raw challenge kit, typed like the lakehouse (the sandbox replays missions from it)."""
+    return {t: [_typed(r) for r in _read_csv(settings.kit_dir / f"{t}.csv")] for t in TABLES}
+
+
 def _read_csv(path: Path) -> list[dict]:
     if not path.exists():
         raise LakehouseError(f"{path} not found. Seed the lakehouse first (ingest-api: seed --reset).")

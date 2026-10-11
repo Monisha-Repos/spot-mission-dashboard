@@ -114,3 +114,54 @@ def test_ai_spend_guards(tmp_path, monkeypatch):
         over = c.post("/ask", json={"question": "Why did WP05 fail?"}).json()
         assert over["provider"] == "none" and "budget" in over["llm_error"]
         assert c.get("/health").json()["ask_usage"]["spent_usd"] == 1.2
+
+
+def _baseline_lake(tmp_path):
+    """A local lakehouse holding only the BASELINE missions, like the demo before any V2 mission arrives."""
+    import csv
+    lake = tmp_path / "lake"
+    lake.mkdir()
+    for t in ("locations", "assets", "missions", "actions", "readings", "anomalies"):
+        with open(f"../data/kit/{t}.csv", encoding="utf-8") as f:
+            rows = list(csv.DictReader(f))
+        keep = [r for r in rows if t in ("locations", "assets") or r["mission_id"] <= "M018"]
+        with open(lake / f"{t}.csv", "w", newline="", encoding="utf-8") as f:
+            w = csv.DictWriter(f, fieldnames=rows[0].keys())
+            w.writeheader()
+            w.writerows(keep)
+    return lake
+
+
+def test_sandbox_missions_join_the_views_for_that_request_only(tmp_path):
+    lake = _baseline_lake(tmp_path)
+    with TestClient(create_app(make_settings(tmp_path, LAKEHOUSE="local", LAKEHOUSE_DIR=str(lake)))) as c:
+        assert c.get("/compare").json()["V2"] is None
+        k = c.get("/summary?sandbox=M019,M020,M024").json()["kpis"]
+        assert k["all"]["missions"] == 21 and k["V2"]["missions"] == 3
+        assert c.get("/compare?sandbox=M019,M020,M024").json()["detail"]["available"]
+        assert c.get("/model/live?sandbox=M019,M020,M024").json()["arrived"] == ["M024"]
+        # Baseline missions, unknown ids and junk are ignored; nothing leaks into the shared data.
+        assert len(c.get("/missions?sandbox=M001,M999,X;DROP").json()) == 18
+        assert len(c.get("/missions").json()) == 18
+        assert c.get("/ops/kpis").json()["missions"] == 18
+
+
+def test_report_summary_uses_only_computed_facts(tmp_path, monkeypatch):
+    from app.assistant import Assistant
+    with TestClient(create_app(make_settings(tmp_path))) as c:
+        plain = c.get("/report/summary").json()
+    assert plain["provider"] == "none" and "91.1%" in plain["text"] and "never trained on" in " ".join(plain["facts"])
+
+    seen = {}
+
+    def fake(self, mode, prompt, history=None):
+        seen.update(mode=mode, prompt=prompt)
+        return "V2 did better, mostly because of battery.\n\nThe model needs retraining.", "test-model"
+
+    monkeypatch.setattr(Assistant, "_call_huggingface", fake)
+    settings = make_settings(tmp_path, ASK_PROVIDER="huggingface", ASK_SPEND_FILE=str(tmp_path / "spend.json"))
+    with TestClient(create_app(settings)) as c:
+        r = c.get("/report/summary").json()
+        assert c.get("/report/summary").json()["cached"]  # one paid call per dataset
+    assert r["provider"] == "huggingface" and r["model"] == "test-model" and "retraining" in r["text"]
+    assert seen["mode"] == "report" and "<facts>" in seen["prompt"] and "77.2%" in seen["prompt"]

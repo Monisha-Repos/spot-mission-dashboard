@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { useApi, useApp } from '../api.js';
+import { api, useApi, useApp } from '../api.js';
+import { useLive } from '../live/LiveContext.jsx';
 import { Async, Badge, Hint, Section, Segmented, Stat } from '../components/ui.jsx';
 import DataTable from '../components/DataTable.jsx';
 import { downloadReport } from '../lib/report.js';
@@ -380,6 +381,7 @@ export default function DataScientist() {
   const compare = useApi('/compare');
   const metrics = useApi('/metrics');
   const modelLive = useApi('/model/live');
+  const live = useLive();
   const waypoints = useApi('/waypoints');
   const summary = useApi('/summary');
   const insights = useApi('/insights');
@@ -390,10 +392,14 @@ export default function DataScientist() {
     setBusy(true);
     setPdfError('');
     try {
+      // The AI review is written when the PDF is made (one model call, cached on the server), not on every page view.
+      const review = await api('/report/summary').catch(() => null);
+      const sandbox = live.sandboxDone;
       await downloadReport({
-        title: 'Spot mission report', subtitle: 'Every mission, waypoint and finding, with what needs attention and how the failure-risk model performs.',
-        kpis: summary.data.kpis, compare: compare.data, metrics: metrics.data, waypoints: waypoints.data, ops: summary.data.ops,
-        missions: missions.data, insights: insights.data, attention: summary.data.needs_attention,
+        title: 'Spot mission report',
+        subtitle: `Every mission, waypoint and finding, how the new data compares with the baseline, and how the failure-risk model performs${sandbox.length ? ` (includes ${sandbox.length} sandbox mission${sandbox.length === 1 ? '' : 's'} from this browser)` : ''}.`,
+        kpis: summary.data.kpis, compare: compare.data, metrics: metrics.data, modelLive: modelLive.data, summary: review, sandbox,
+        waypoints: waypoints.data, ops: summary.data.ops, missions: missions.data, insights: insights.data, attention: summary.data.needs_attention,
       });
       notify('PDF download started');
     } catch (e) {

@@ -9,7 +9,7 @@ import AskPanel from './components/AskPanel.jsx';
 import { BackToTop, Toasts } from './components/ui.jsx';
 import { scrollToEl } from './lib/dom.js';
 import { LiveProvider } from './live/LiveContext.jsx';
-import { LiveBadge } from './live/LiveViews.jsx';
+import { LiveBadge, SandboxNotice } from './live/LiveViews.jsx';
 import DecisionCard from './live/DecisionCard.jsx';
 import StreamBubble from './live/StreamBubble.jsx';
 
@@ -157,6 +157,7 @@ export default function App() {
         </header>
 
         <main id="main" className={`main main-${tab}`} tabIndex={-1}>
+          {tab !== 'operator' && <SandboxNotice />}
           {tab === 'overview' && <Overview theme={theme} context={context} setContext={setContext} onReplay={openReplay} />}
           {tab === 'replay' && <Replay missionId={replayMission} onMission={setReplayMission} />}
           {tab === 'analysis' && <DataScientist />}

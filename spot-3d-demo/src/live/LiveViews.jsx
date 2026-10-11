@@ -242,3 +242,21 @@ export function PresenterControls() {
     </Section>
   );
 }
+
+/** While sandbox missions are included in the views: say so, and offer the way back to the shared data. */
+export function SandboxNotice() {
+  const live = useLive();
+  const ids = live.sandboxDone;
+  if (!ids.length) return null;
+  const span = ids.length > 1 ? `${ids[0]}–${ids[ids.length - 1]}` : ids[0];
+  return (
+    <p className="sandbox-notice" role="status">
+      <span className="sandbox-notice-dot" aria-hidden="true" />
+      <span>
+        <strong>Your sandbox run is included:</strong> {ids.length} V2 mission{ids.length === 1 ? '' : 's'} ({span}) in every number,
+        chart, PDF and AI answer. Only in this browser; nothing is saved.
+      </span>
+      <button type="button" className="link-btn" onClick={() => live.sandboxControl('stop')}>Back to shared data</button>
+    </p>
+  );
+}

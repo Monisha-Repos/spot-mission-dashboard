@@ -20,7 +20,18 @@ export class ApiError extends Error {
   constructor(status, message) { super(message); this.status = status; }
 }
 
+// Kit missions this browser's sandbox has finished. Data reads (and the AI assistant) include them through the
+// backend's ?sandbox= view, built in memory per request: nothing is saved and no one else sees them. The Operator
+// Console and live controls always work on the shared data.
+let sandboxMissions = [];
+export function setSandboxMissions(ids) { sandboxMissions = ids; }
+function withSandbox(path) {
+  if (!sandboxMissions.length || /^\/(ops|live)(\/|\?|$)/.test(path)) return path;
+  return `${path}${path.includes('?') ? '&' : '?'}sandbox=${sandboxMissions.join(',')}`;
+}
+
 export async function api(path, { method = 'GET', body, token } = {}) {
+  path = withSandbox(path);
   const headers = {};
   if (body !== undefined) headers['Content-Type'] = 'application/json';
   if (token) headers.Authorization = `Bearer ${token}`;
