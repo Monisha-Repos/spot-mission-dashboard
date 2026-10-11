@@ -1,4 +1,5 @@
 # Render Blueprint: the backend container (Dockerfile). The frontend (spot-3d-demo/) is deployed on Vercel.
+# The 1 GB disk keeps ops.db (issues, audit trail, snapshots) across restarts and redeploys.
 services:
   - type: web
     name: spot-mission-api
@@ -11,6 +12,19 @@ services:
       mountPath: /var/data
       sizeGB: 1
     envVars:
+      # Mission data: the Databricks lakehouse both APIs read and write. ops.db stays on the disk.
+      - key: SINK
+        value: databricks
+      - key: DATABRICKS_HOST
+        sync: false
+      - key: DATABRICKS_HTTP_PATH
+        sync: false
+      - key: DATABRICKS_TOKEN
+        sync: false
+      - key: DATABRICKS_CATALOG
+        value: workspace
+      - key: DATABRICKS_SCHEMA
+        value: spot
       - key: OPS_PIN
         sync: false
       - key: ANTHROPIC_API_KEY
