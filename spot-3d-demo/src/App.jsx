@@ -6,9 +6,7 @@ import Replay from './tabs/Replay.jsx';
 import DataScientist from './tabs/DataScientist.jsx';
 import OpsConsole from './modules/ops/OpsConsole.jsx';
 import AskPanel from './components/AskPanel.jsx';
-import AlarmCenter from './components/AlarmCenter.jsx';
 import { BackToTop, Toasts } from './components/ui.jsx';
-import { createSiren } from './lib/siren.js';
 import { scrollToEl } from './lib/dom.js';
 import { LiveProvider } from './live/LiveContext.jsx';
 import { LiveBadge } from './live/LiveViews.jsx';
@@ -49,9 +47,6 @@ export default function App() {
   const [session, setSessionState] = useState(loadSession);
   const [context, setContext] = useState({ floor: 1 });
   const [replayMission, setReplayMission] = useState(null);
-  const [siren, setSiren] = useState(null);
-  const [muted, setMuted] = useState(false);
-  const [alarm, setAlarm] = useState(false);
   const [toasts, setToasts] = useState([]);
   const refreshed = useLastRefresh();
   const topbar = useRef(null);
@@ -123,17 +118,11 @@ export default function App() {
     });
   }
 
-  function arm() {
-    if (siren) { setMuted(m => !m); return; }
-    const s = createSiren();
-    if (s) { s.test(); setSiren(s); }
-  }
-
   return (
     <AppContext.Provider value={app}>
       <LiveProvider>
       <a className="skip" href="#main">Skip to content</a>
-      <div className="app" inert={alarm}>
+      <div className="app">
         <header className="topbar" ref={topbar}>
           <a className="brand" href="/overview" aria-label="spotat.work home" onClick={e => { e.preventDefault(); switchTab('overview'); }}>
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 2h10l5 10-5 10H7L2 12z" /></svg>
@@ -151,9 +140,6 @@ export default function App() {
               <LiveBadge />
               {refreshed && <span className="refreshed" title="Last time data loaded from the backend">Data updated {clock(refreshed)}</span>}
             </span>
-            <button type="button" className={`btn btn-sm ${siren ? 'btn-ghost' : 'btn-accent'}`} onClick={arm} aria-pressed={siren ? muted : undefined}>
-              {!siren ? 'Arm alarms 📢' : muted ? 'Unmute' : 'Mute'}
-            </button>
             <button
               type="button"
               className="icon-btn theme-toggle"
@@ -188,7 +174,6 @@ export default function App() {
         <BackToTop />
       </div>
       <Toasts items={toasts} />
-      <AlarmCenter siren={siren} muted={muted} onMute={() => setMuted(m => !m)} onActive={setAlarm} />
       </LiveProvider>
     </AppContext.Provider>
   );

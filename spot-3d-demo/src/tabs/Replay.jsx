@@ -570,7 +570,6 @@ export default function Replay({ missionId, onMission }) {
     if (!tl) return undefined;
     const onKey = e => {
       if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey || isTypingTarget(e.target)) return;
-      if (document.querySelector('.alarm-backdrop')) return;
       const onControl = e.target instanceof Element && e.target.closest('button, a, summary');
       if ((e.key === ' ' && !onControl) || e.key === 'k' || e.key === 'K') { e.preventDefault(); keys.current.togglePlay(); }
       else if (e.key === 'ArrowLeft' || e.key === 'j' || e.key === 'J') { e.preventDefault(); keys.current.stepStop(-1); }
