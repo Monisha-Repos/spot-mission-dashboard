@@ -1195,3 +1195,7 @@ body:has(.stream-bubble, .stream-dialog) .toasts { bottom: 96px; }
 }
 @media (max-width: 899px) { .ask-dock { display: none; } }
 @keyframes dock-in { from { transform: translateX(24px); opacity: 0; } }
+
+/* Links to the published dataset and model on the Hugging Face Hub. */
+.hf-links { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0 0; }
+.hf-links .btn { text-decoration: none; }

@@ -248,8 +248,18 @@ function ModelMetrics({ m, links }) {
         </table>
       </div>
       {links && (links.dataset || links.model) && (
-        <p className="muted">On Hugging Face: {links.dataset && <a href={`https://huggingface.co/datasets/${links.dataset}`} target="_blank" rel="noreferrer">dataset {links.dataset}</a>}
-          {links.dataset && links.model && ' · '}{links.model && <a href={`https://huggingface.co/${links.model}`} target="_blank" rel="noreferrer">model {links.model}</a>}</p>
+        <p className="hf-links">
+          {links.dataset && (
+            <a className="btn btn-ghost btn-sm" href={`https://huggingface.co/datasets/${links.dataset}`} target="_blank" rel="noreferrer" title={links.dataset}>
+              Dataset on Hugging Face <span aria-hidden="true">↗</span><span className="sr-only"> (opens in a new tab)</span>
+            </a>
+          )}
+          {links.model && (
+            <a className="btn btn-ghost btn-sm" href={`https://huggingface.co/${links.model}`} target="_blank" rel="noreferrer" title={links.model}>
+              Model on Hugging Face <span aria-hidden="true">↗</span><span className="sr-only"> (opens in a new tab)</span>
+            </a>
+          )}
+        </p>
       )}
       <div className="stat-grid">
         <Stat label="Precision" value={num(t.precision, 3)} hint={GLOSSARY.precision} />
