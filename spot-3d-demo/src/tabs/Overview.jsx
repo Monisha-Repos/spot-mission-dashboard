@@ -147,6 +147,31 @@ function Takeaways({ detail, liveModel }) {
   );
 }
 
+/** Which way is better for each headline stat, and how its change is written. */
+const TRENDS = {
+  success: { better: 'higher', unit: 'pts' }, completion: { better: 'higher', unit: 'pts' },
+  findings: { better: 'lower', unit: '' }, battery: { better: 'lower', unit: 'pts' }, issues: { better: 'lower', unit: '' },
+};
+
+/**
+ * Ticker arrows for the headline stats while new data streams in: each value is compared with what it was when the
+ * live run (or sandbox replay) started. The baseline is dropped when the run is over and its data is gone.
+ */
+function useRunTrends(values, tracking) {
+  const base = useRef(null);
+  if (!tracking) base.current = null;
+  else if (!base.current && values) base.current = values;
+  if (!tracking || !values || !base.current) return {};
+  return Object.fromEntries(Object.entries(TRENDS).map(([key, { better, unit }]) => {
+    const now = values[key], then = base.current[key];
+    if (typeof now !== 'number' || typeof then !== 'number') return [key, null];
+    const delta = now - then;
+    if (Math.abs(delta) < (unit ? 0.05 : 0.5)) return [key, null];
+    const size = unit ? `${Math.abs(delta).toFixed(1)} ${unit}` : `${Math.round(Math.abs(delta))}`;
+    return [key, { up: delta > 0, good: better === 'higher' ? delta > 0 : delta < 0, text: size }];
+  }));
+}
+
 export default function Overview({ theme, context, setContext, onReplay }) {
   const { go } = useApp();
   const summary = useApi('/summary');
@@ -210,6 +235,12 @@ export default function Overview({ theme, context, setContext, onReplay }) {
   }, [flash]);
 
   const k = summary.data?.kpis;
+  // Arrows show while a live run is on, or while sandbox missions are included in the numbers.
+  const tracking = live.active || live.sandboxDone.length > 0 || ['finished', 'saving'].includes(live.presenter?.state);
+  const trends = useRunTrends(k?.all && {
+    success: k.all.action_success_pct, completion: k.all.mission_completion_pct, findings: k.all.anomalies,
+    battery: k.all.avg_battery_drain_pct, issues: summary.data.ops?.open_issues,
+  }, tracking);
   return (
     <>
       <section className="hero" aria-label="Spot 3D model">
@@ -286,21 +317,23 @@ export default function Overview({ theme, context, setContext, onReplay }) {
         <Async state={summary}>
           {() => (
             <div className="stat-grid">
-              <Stat label="Action success" value={pct(k.all.action_success_pct)} sub={`V1 ${pct(k.V1?.action_success_pct)} → V2 ${pct(k.V2?.action_success_pct)}`} tone="accent" />
-              <Stat label="Missions completed" value={pct(k.all.mission_completion_pct)} sub={`${k.all.missions} missions`} />
+              <Stat label="Action success" value={pct(k.all.action_success_pct)} sub={`V1 ${pct(k.V1?.action_success_pct)} → V2 ${pct(k.V2?.action_success_pct)}`} tone="accent" trend={trends.success} />
+              <Stat label="Missions completed" value={pct(k.all.mission_completion_pct)} sub={`${k.all.missions} missions`} trend={trends.completion} />
               <Stat
                 label="Findings"
                 value={k.all.anomalies}
                 sub={`${k.all.serious_anomalies} high or critical`}
+                trend={trends.findings}
                 onClick={() => scrollToEl('attention')}
                 action="Jump to the top findings"
               />
-              <Stat label="Battery used per mission" value={pct(k.all.avg_battery_drain_pct, 0)} sub={`V1 ${pct(k.V1?.avg_battery_drain_pct, 0)} → V2 ${pct(k.V2?.avg_battery_drain_pct, 0)}`} />
+              <Stat label="Battery used per mission" value={pct(k.all.avg_battery_drain_pct, 0)} sub={`V1 ${pct(k.V1?.avg_battery_drain_pct, 0)} → V2 ${pct(k.V2?.avg_battery_drain_pct, 0)}`} trend={trends.battery} />
               {summary.data.ops ? (
                 <Stat
                   label="Open issues"
                   value={summary.data.ops.open_issues ?? '—'}
                   sub={`${summary.data.ops.pending_alarms} alarms waiting`}
+                  trend={trends.issues}
                   onClick={() => go('operator')}
                   action="Open the issue queue"
                 />

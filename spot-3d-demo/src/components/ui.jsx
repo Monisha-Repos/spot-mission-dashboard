@@ -23,12 +23,25 @@ export function Section({ eyebrow, title, actions, children, className = '', id 
  * A headline number. With onClick it becomes a shortcut (e.g. "Open issues" → the queue),
  * shown with a small arrow; `action` is the screen-reader description of where it goes.
  */
-export function Stat({ label, value, sub, tone, hint, onClick, action }) {
+/**
+ * trend (optional): { up, good, text } shows a ticker-style arrow after the value. The arrow points the way the number
+ * moved; green means the move is good, red that it is bad (fewer findings going down is green, for example).
+ */
+export function Stat({ label, value, sub, tone, hint, onClick, action, trend }) {
   const cls = `stat${tone ? ` tone-${tone}` : ''}${onClick ? ' stat-link' : ''}`;
   const body = (
     <>
       <span className="stat-label">{label}{hint && <Hint text={hint} />}{onClick && <span className="stat-go" aria-hidden="true">→</span>}</span>
-      <strong className="stat-value">{value}</strong>
+      <strong className="stat-value">
+        {value}
+        {trend && (
+          <span key={trend.text} className={`stat-trend ${trend.good ? 'is-good' : 'is-bad'}`}
+            title={`${trend.up ? 'Up' : 'Down'} ${trend.text} since this live run started (${trend.good ? 'better' : 'worse'})`}>
+            <span aria-hidden="true">{trend.up ? '▲' : '▼'}</span> {trend.text}
+            <span className="sr-only"> {trend.up ? 'up' : 'down'} since the live run started, {trend.good ? 'better' : 'worse'}</span>
+          </span>
+        )}
+      </strong>
       {sub && <span className="stat-sub">{sub}</span>}
       {onClick && action && <span className="sr-only">. {action}</span>}
     </>
