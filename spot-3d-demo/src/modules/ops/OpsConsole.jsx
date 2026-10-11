@@ -3,6 +3,7 @@ import { api, asset, useApi, useApp } from '../../api.js';
 import { Async, Badge, Field, Section, Segmented, Stat } from '../../components/ui.jsx';
 import LineChart from '../../components/LineChart.jsx';
 import LoginForm from './LoginForm.jsx';
+import { PresenterControls } from '../../live/LiveViews.jsx';
 import { downloadReport } from '../../lib/report.js';
 import { formatTime, kpiLabel, nextStatuses, num, reading, severityTone, titleCase } from '../../lib/format.js';
 
@@ -349,6 +350,7 @@ export default function OpsConsole() {
         )}
       </header>
       {!session && <Section eyebrow="Sign in" title="Operator sign-in"><LoginForm /></Section>}
+      <PresenterControls />
       {o && (
         <div className="stat-grid">
           <Stat label="Open issues" value={o.open_issues} sub={`${o.issues} total`} tone={o.open_issues ? 'warn' : 'ok'} />

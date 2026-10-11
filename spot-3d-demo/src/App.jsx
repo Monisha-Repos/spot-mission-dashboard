@@ -7,6 +7,8 @@ import OpsConsole from './modules/ops/OpsConsole.jsx';
 import AskPanel from './components/AskPanel.jsx';
 import AlarmCenter from './components/AlarmCenter.jsx';
 import { createSiren } from './lib/siren.js';
+import { LiveProvider } from './live/LiveContext.jsx';
+import { LiveBadge } from './live/LiveViews.jsx';
 
 const TABS = [['overview', 'Overview'], ['replay', 'Replay'], ['analysis', 'Data Analysis'], ['operator', 'Operator']];
 const PLAIN_TABS = ['overview', 'replay'];
@@ -36,7 +38,6 @@ export default function App() {
   const [siren, setSiren] = useState(null);
   const [muted, setMuted] = useState(false);
   const [alarm, setAlarm] = useState(false);
-  const [stream, setStream] = useState('connecting');
 
   useEffect(() => {
     const { pathname, search } = window.location;
@@ -60,6 +61,7 @@ export default function App() {
 
   return (
     <AppContext.Provider value={app}>
+      <LiveProvider>
       <a className="skip" href="#main">Skip to content</a>
       <div className="app" inert={alarm}>
         <header className="topbar">
@@ -75,9 +77,7 @@ export default function App() {
             ))}
           </nav>
           <div className="topbar-tools">
-            <span className={`live live-${stream}`} title={`Live ingest stream: ${stream}`}>
-              <i aria-hidden="true" />{stream === 'live' ? 'Live' : stream === 'offline' ? 'Offline' : '…'}
-            </span>
+            <LiveBadge />
             <button type="button" className={`btn btn-sm ${siren ? 'btn-ghost' : 'btn-accent'}`} onClick={arm} aria-pressed={siren ? muted : undefined}>
               {!siren ? 'Arm alarms 📢' : muted ? 'Unmute' : 'Mute'}
             </button>
@@ -112,7 +112,8 @@ export default function App() {
           context={tab === 'overview' ? context : tab === 'replay' ? { mission: replayMission } : {}}
         />
       </div>
-      <AlarmCenter siren={siren} muted={muted} onMute={() => setMuted(m => !m)} onActive={setAlarm} onStream={setStream} />
+      <AlarmCenter siren={siren} muted={muted} onMute={() => setMuted(m => !m)} onActive={setAlarm} />
+      </LiveProvider>
     </AppContext.Provider>
   );
 }

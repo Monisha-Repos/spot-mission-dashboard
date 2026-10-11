@@ -22,8 +22,8 @@ Common commands:
 
 | Task | Folder | Command |
 |---|---|---|
-| Stream the 9 live (IMPROVED) missions | `ingest-api` | `.\run.ps1 feed --delay 8` |
-| Reset the lakehouse to baseline only | `ingest-api` | `.\run.ps1 seed --reset` (stop `serve` first) |
+| Stream the 9 live (IMPROVED) missions | dashboard | **Operator** tab → **Start live feed** (or `.\run.ps1 feed --delay 8` for whole missions) |
+| Reset to baseline (lakehouse + operator console) | dashboard | **Operator** tab → **Reset to baseline** (supervisor), or the commands in section 4 |
 | Clear operator issues and snapshots | `backend` | `..\.venv\Scripts\python manage.py reset-ops` (stop the backend first) |
 | Check where the backend reads data from | `backend` | `..\.venv\Scripts\python manage.py check` |
 | Reload data without restarting | any | `curl.exe -X POST http://localhost:8000/admin/refresh` |
@@ -31,7 +31,7 @@ Common commands:
 | Backend API docs | browser | http://localhost:8000/docs |
 | Run all tests | repo root | `cd backend; ..\.venv\Scripts\python -m pytest -q; cd ..\spot-3d-demo; npm test` |
 
-**Demo in 4 steps:** reset (section 4) → start the three terminals → in the dashboard, sign in on **Operator** and click **Arm alarms 🔊** → run `.\run.ps1 feed --delay 8`. The first alarm fires on M020.
+**Demo in 4 steps:** start the three terminals → in the dashboard, sign in on **Operator** as a supervisor and click **Reset to baseline** → click **Arm alarms 📢** → click **Start live feed** (×60 is about 4 minutes for all nine missions). Spot walks its route on the Overview, each step shows the AI's failure-risk estimate, and the first alarm fires mid-mission on M020. Visitors on the hosted site can click **Try live demo** on the Overview for their own private replay (sandbox) at any time.
 
 First time on this machine? Do sections 1, 2b and 2c once.
 
@@ -192,22 +192,49 @@ npm run dev
 Open http://127.0.0.1:5173. It talks to the backend on `:8000` and the ingest API's live stream on `:8081`; copy
 `.env.example` to `.env.local` to change those. The header shows **Live** when the stream is connected.
 
-Handy links: http://127.0.0.1:5173/#scientist, http://127.0.0.1:5173/#operator, `?theme=light`.
+Handy links: http://127.0.0.1:5173/analysis, http://127.0.0.1:5173/operator, `?theme=light`.
 
 ---
 
 ## 3. Demo: stream the IMPROVED missions in
 
-In Terminal 2:
+### 3a. From the dashboard (presenter mode, recommended)
+
+Sign in on the **Operator** tab, then use **Live demo feed**:
+
+| Control | What it does |
+|---|---|
+| Speed ×30 / ×60 / ×120 / ×300 | Mission time compression. A ~22-minute mission takes about 22 s at ×60; quiet gaps are capped at 5 s and missions are 3 s apart. |
+| Pause on alarms | The feed waits at each alarm until every alarm has a decision, then carries on by itself. |
+| Start / Pause / Resume / Stop | Stop keeps missions already saved; the one in progress is not saved. |
+| Reset to baseline (supervisor) | Stops the feed, reloads the 18 BASELINE missions (about 3 minutes on Databricks) and clears the Operator Console. |
+| Test alarm (this screen) | A practice alarm on your screen only, to check the siren and the pop-up. |
+
+Every open dashboard sees the same thing: the top bar shows `LIVE · M020 · WP07 · 80%`, the Overview's live panel lists each
+step, reading and finding as it happens (with the AI's risk estimate before each step), Spot walks, and the current waypoint
+pulses on the map. Each mission is written to the lakehouse when it completes, through the same validation as `POST /ingest/missions`.
+Alarms (M020, M022, M024, M025, M027) fire the moment the anomaly is detected, before their mission is saved.
+
+The same controls over HTTP (the backend forwards them with `INGEST_API_KEY`):
+```powershell
+$t = (Invoke-RestMethod -Method Post http://localhost:8000/ops/login -ContentType application/json -Body '{"name":"Sam","role":"supervisor","pin":"<OPS_PIN>"}').token
+Invoke-RestMethod -Method Post http://localhost:8000/ops/live/start -Headers @{Authorization="Bearer $t"} -ContentType application/json -Body '{"speed":60,"pause_on_alarm":true}'
+curl.exe http://localhost:8081/live/status
+```
+
+### 3b. Sandbox mode (visitors)
+
+On the Overview, **Try live demo** replays the same nine missions in that browser only (`GET /live/script`): same ticker,
+walking Spot and alarm, but nothing is saved and no one else sees it. Alarm decisions stay in that tab. Use it to rehearse
+without touching the shared data, and it is what judges get if they open the hosted site after the presentation.
+
+### 3c. Whole missions from the command line (the original feed)
+
 ```powershell
 .\run.ps1 feed --delay 8
 ```
-This sends M019–M027 one every 8 seconds (writing each one also takes about 8 seconds on Databricks). Alarms fire on M020, M022, M024, M025 and M027.
-
-To go faster when rehearsing:
-```powershell
-.\run.ps1 feed --delay 0
-```
+This sends M019–M027 as finished missions, one every 8 seconds (writing each one also takes about 8 seconds on Databricks).
+Use `--delay 0` to go faster when rehearsing.
 
 Then check the result:
 ```powershell
@@ -241,7 +268,10 @@ Invoke-RestMethod -Method Post http://localhost:8000/ops/alerts/AN014/decision -
 
 ## 4. Reset before every rehearsal and the real demo
 
-Stop both servers (Ctrl+C in Terminals 1 and 4), then:
+Easiest: **Operator** tab → **Reset to baseline** (signed in as a supervisor). It resets the lakehouse and the Operator
+Console while everything keeps running.
+
+From the command line instead: stop both servers (Ctrl+C in Terminals 1 and 4), then:
 ```powershell
 .\run.ps1 seed --reset
 cd ..\backend
@@ -279,7 +309,9 @@ Remove-Item Env:SINK
 |---|---|
 | `PORT=8082` | Use another port if 8081 is taken. `feed` uses the same setting. |
 | `INGEST_API_KEY=<random string>` | `POST /ingest/missions` then needs the header `X-API-Key`. `feed` sends it automatically. |
-| `INGEST_WEBHOOK_URL=http://localhost:8000/ops/ingest-hook` | Notifies the Python backend after each mission. |
+| `INGEST_WEBHOOK_URL=http://localhost:8000/ops/ingest-hook` | Notifies the Python backend after each mission, of each live alarm, and after a reset. Needed for presenter mode. |
+
+The backend finds this API through `INGEST_URL` in `backend\.env` (default `http://localhost:8081`); set it when the two run on different hosts.
 
 ---
 
@@ -302,7 +334,10 @@ Remove-Item Env:SINK
 | Backend: assistant answers "Here's what I found in the data" | No LLM configured (or the call failed: see `llm_error` in the response). Set `ANTHROPIC_API_KEY` or `HF_TOKEN`. |
 | Dashboard: "Can't reach the backend at http://localhost:8000" | The backend (Terminal 4) isn't running, or it's on another port. Set `VITE_API_URL` in `spot-3d-demo\.env.local` and restart `npm run dev`. |
 | Dashboard: header says **Offline** | The ingest API (`serve`) isn't running. Data still shows; live alarms and auto-refresh need it. |
-| Dashboard: no siren | Click **Arm alarms 🔊** once after the page loads. Browsers block sound until you click. |
+| Dashboard: no siren | Click **Arm alarms 📢** once after the page loads. Browsers block sound until you click. |
+| Operator tab: **Ingest API offline** / `cannot reach the ingest API` | `serve` isn't running, or `INGEST_URL` in `backend\.env` points elsewhere. |
+| Live feed: `Every IMPROVED mission is already in the lakehouse` | Click **Reset to baseline** first. |
+| Live feed stays on **Waiting for an alarm decision** | Pause on alarms is on: decide every open alarm (or click **Resume**). |
 | Backend: `model was trained with scikit-learn X` warning | Reinstall with `pip install -r backend\requirements.txt`, or retrain with `python ml\train.py`. |
 
 ---
@@ -318,13 +353,40 @@ Remove-Item Env:SINK
 
 ---
 
-## 9. Retrain and publish the risk model (Hugging Face)
+## 9. Retrain and publish the risk model and its data (Hugging Face)
+
+The data is split once, by whole mission, into **train**, **test** and **live** (the last 4 IMPROVED missions, never trained on,
+which stream in during the demo so the dashboard scores the model on them as they arrive). The split lives in `ml\splits.json`.
 
 From the repo root:
 ```powershell
-.venv\Scripts\python ml\train.py                    # rewrites ml\model.joblib + ml\metrics.json (seed 42, same result each run)
+.venv\Scripts\python ml\build_dataset.py           # writes ml\splits.json (first time) + ml\dataset\{train,test,live}.csv
+.venv\Scripts\python ml\train.py                   # rewrites ml\model.joblib + ml\metrics.json (seed 42, same result each run)
 .venv\Scripts\hf auth login                         # once: paste a Hugging Face token with WRITE access
-.venv\Scripts\python ml\push_to_hub.py --dry-run    # writes ml\MODEL_CARD.md to review, uploads nothing
-.venv\Scripts\python ml\push_to_hub.py              # creates <username>/spot-action-failure-risk (public) and uploads
+.venv\Scripts\python ml\build_dataset.py --push    # creates <username>/spot-mission-actions (dataset, tag splits-v1)
+.venv\Scripts\python ml\push_to_hub.py --dry-run   # writes ml\MODEL_CARD.md to review, uploads nothing
+.venv\Scripts\python ml\push_to_hub.py             # creates <username>/spot-action-failure-risk (public) and uploads
 ```
+Then set `HF_DATASET_REPO` and `HF_MODEL_REPO` in `backend\.env` so the Data Analysis tab links to them. Publishing costs nothing.
 The token from `hf auth login` is stored in your user profile, not in the repo. The app always loads its local `ml\model.joblib`; it never downloads from the Hub.
+
+---
+
+## 10. AI assistant on Hugging Face credits
+
+In `backend\.env`:
+```
+ASK_PROVIDER=huggingface
+HF_TOKEN=hf_...                 # a token with "Make calls to Inference Providers" permission
+HF_CHAT_MODEL=Qwen/Qwen3-235B-A22B-Instruct-2507
+HF_PROVIDER=deepinfra           # pinned provider keeps the price predictable; "auto" lets Hugging Face choose
+HF_FALLBACK_MODEL=meta-llama/Llama-3.1-8B-Instruct
+ASK_BUDGET_USD=5                # hard stop for this month's estimated spend
+```
+At about $0.09 / $0.55 per million input / output tokens, one answer costs roughly $0.001, so $5 covers thousands of questions.
+The spend guard keeps a public demo from eating the credits: identical questions are answered from a cache, each browser gets
+6 AI answers a minute and 40 an hour (`ASK_PER_MINUTE`, `ASK_PER_HOUR`), and once the month's estimate reaches `ASK_BUDGET_USD` the
+assistant lists the matching records instead. The estimate is in `data\ask_spend.json`, in `GET /health` (`ask_usage`) and under
+the Operator tab's live controls. Check actual spend at https://huggingface.co/settings/billing.
+
+Rehearse with `ASK_PROVIDER=none` (free, answers with the matching records) and switch to `huggingface` for the recording and the judges.

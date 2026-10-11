@@ -19,6 +19,8 @@ import java.util.Map;
  *   feed [--scenario S] [--delay SEC] [--url URL]
  *                                      replay kit missions (default IMPROVED) through the running API,
  *                                      one every SEC seconds (default 8), as if SPOT were sending them live
+ *
+ * For an event-by-event live demo, start `serve` and use POST /live/start (or the dashboard's Operator Console).
  */
 public final class Main {
 
@@ -46,34 +48,18 @@ public final class Main {
         Sink sink = Sink.from(config);
         sink.createTables(false);
         int port = Integer.parseInt(config.get("PORT", "8081"));
-        new ApiServer(sink, new IngestService(sink), config.get("INGEST_API_KEY", ""), config.get("INGEST_WEBHOOK_URL", "")).start(port);
+        String apiKey = config.get("INGEST_API_KEY", "");
+        IngestService ingest = new IngestService(sink);
+        EventHub events = new EventHub();
+        Webhook webhook = new Webhook(config.get("INGEST_WEBHOOK_URL", ""), apiKey);
+        LiveFeed live = new LiveFeed(sink, ingest, events, webhook, kitDir(config));
+        new ApiServer(sink, ingest, events, live, apiKey, webhook).start(port);
         log("SPOT ingest API listening on http://localhost:" + port + ", writing to " + sink.describe());
     }
 
     private static void seed(Config config, Map<String, String> options) throws Exception {
-        Sink sink = Sink.from(config);
-        boolean reset = options.containsKey("reset");
-        log((reset ? "resetting " : "preparing ") + sink.describe());
-        sink.createTables(reset);
-
-        KitData kit = KitData.load(kitDir(config));
-        Map<String, Long> counts = sink.counts();
-        for (Schema.Table reference : List.of(Schema.LOCATIONS, Schema.ASSETS)) {
-            if (counts.getOrDefault(reference.name(), 0L) == 0) {
-                sink.append(reference, kit.rows(reference));
-                log("loaded " + kit.rows(reference).size() + " " + reference.name());
-            }
-        }
-
-        IngestService ingest = new IngestService(sink);
-        String scenario = options.getOrDefault("scenario", "BASELINE");
-        int added = 0;
-        for (Map<String, Object> bundle : kit.bundles(scenario)) {
-            IngestService.Result result = ingest.ingest(bundle);
-            if (result.status() == 201) added++;
-            else if (result.status() != 409) throw new IllegalStateException("kit mission rejected: " + result.body());
-        }
-        log("seeded " + added + " " + scenario + " mission(s); lakehouse now has " + sink.counts());
+        Seeder.seed(Sink.from(config), KitData.load(kitDir(config)), options.containsKey("reset"),
+                options.getOrDefault("scenario", "BASELINE"));
     }
 
     private static void feed(Config config, Map<String, String> options) throws Exception {

@@ -70,8 +70,11 @@ def test_compare_and_insights(client):
 
 def test_model_metrics_and_predict(client):
     m = client.get("/metrics").json()
-    assert m["split"]["test_actions"] + m["split"]["train_actions"] == 270
-    assert not set(m["split"]["train_missions"]) & set(m["split"]["test_missions"])  # no mission leaks across the split
+    split = m["split"]
+    assert split["test_actions"] + split["train_actions"] + split["live_actions"] == 270
+    # No mission leaks across the splits, and live missions are never trained on.
+    sets = [set(split["train_missions"]), set(split["test_missions"]), set(split["live_missions"])]
+    assert not (sets[0] & sets[1] or sets[0] & sets[2] or sets[1] & sets[2])
     low = client.post("/predict", json={"action_type": "NAVIGATION", "location_id": "WP05", "asset_id": "HX-201",
                                         "battery_pct": 15, "configuration_version": "V1"}).json()
     high = client.post("/predict", json={"action_type": "NAVIGATION", "location_id": "WP05", "asset_id": "HX-201",

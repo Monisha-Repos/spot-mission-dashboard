@@ -1,7 +1,7 @@
 {
   "model": "spot-action-failure-risk",
-  "model_type": "random_forest",
-  "trained_at": "2026-10-10T17:03:45+00:00",
+  "model_type": "logistic_regression",
+  "trained_at": "2026-10-11T01:36:50+00:00",
   "sklearn_version": "1.9.1",
   "target": "Will this action fail? (actions.status == FAILED), predicted before the action runs",
   "features": {
@@ -28,7 +28,8 @@
     "failure_rate": 0.1815
   },
   "split": {
-    "method": "80/20 by mission (StratifiedGroupKFold, stratified on scenario x outcome), seed 42",
+    "method": "by mission; live = the last 4 IMPROVED missions by start time (never trained on, streamed in the demo); test = 1 of 5 StratifiedGroupKFold folds of the rest (stratified on scenario x outcome, seed 42); train = the remaining missions",
+    "revision": "splits-v1",
     "train_missions": [
       "M001",
       "M002",
@@ -36,85 +37,122 @@
       "M006",
       "M007",
       "M008",
-      "M009",
+      "M010",
       "M011",
       "M012",
       "M013",
       "M014",
       "M015",
-      "M017",
+      "M016",
       "M018",
       "M019",
       "M020",
-      "M021",
       "M022",
-      "M023",
-      "M024",
-      "M025",
-      "M026"
+      "M023"
     ],
     "test_missions": [
       "M004",
       "M005",
-      "M010",
-      "M016",
+      "M009",
+      "M017",
+      "M021"
+    ],
+    "live_missions": [
+      "M024",
+      "M025",
+      "M026",
       "M027"
     ],
-    "train_actions": 220,
+    "train_actions": 180,
     "test_actions": 50,
+    "live_actions": 40,
     "test_failures": 9
   },
   "cross_validation": {
     "method": "5-fold StratifiedGroupKFold on the training set",
     "candidates": {
       "logistic_regression": {
-        "pr_auc_mean": 0.4547,
-        "pr_auc_std": 0.0961,
-        "f1_mean": 0.4097,
-        "f1_std": 0.0742,
-        "threshold": 0.4572
+        "pr_auc_mean": 0.5084,
+        "pr_auc_std": 0.1814,
+        "f1_mean": 0.4431,
+        "f1_std": 0.0638,
+        "threshold": 0.5953
       },
       "random_forest": {
-        "pr_auc_mean": 0.5053,
-        "pr_auc_std": 0.1293,
-        "f1_mean": 0.4438,
-        "f1_std": 0.1753,
-        "threshold": 0.5133
+        "pr_auc_mean": 0.5022,
+        "pr_auc_std": 0.1135,
+        "f1_mean": 0.4253,
+        "f1_std": 0.1671,
+        "threshold": 0.5673
       }
     },
-    "selected": "random_forest",
+    "selected": "logistic_regression",
     "selected_by": "highest mean PR-AUC"
   },
-  "decision_threshold": 0.5133,
+  "decision_threshold": 0.5953,
   "test": {
-    "precision": 0.4444,
-    "recall": 0.4444,
-    "f1": 0.4444,
-    "accuracy": 0.8,
+    "precision": 0.2778,
+    "recall": 0.5556,
+    "f1": 0.3704,
+    "accuracy": 0.66,
     "confusion_matrix": {
-      "true_negative": 36,
-      "false_positive": 5,
-      "false_negative": 5,
-      "true_positive": 4
+      "true_negative": 28,
+      "false_positive": 13,
+      "false_negative": 4,
+      "true_positive": 5
     },
-    "pr_auc": 0.3247,
-    "roc_auc": 0.6694
+    "pr_auc": 0.4209,
+    "roc_auc": 0.7073
+  },
+  "test_by_configuration": {
+    "V1": {
+      "actions": 40,
+      "failures": 8,
+      "precision": 0.2778,
+      "recall": 0.625,
+      "f1": 0.3846,
+      "accuracy": 0.6,
+      "confusion_matrix": {
+        "true_negative": 19,
+        "false_positive": 13,
+        "false_negative": 3,
+        "true_positive": 5
+      },
+      "pr_auc": 0.4467,
+      "roc_auc": 0.707
+    },
+    "V2": {
+      "actions": 10,
+      "failures": 1,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "accuracy": 0.9,
+      "confusion_matrix": {
+        "true_negative": 9,
+        "false_positive": 0,
+        "false_negative": 1,
+        "true_positive": 0
+      },
+      "pr_auc": 0.25,
+      "roc_auc": 0.6667
+    }
   },
   "baselines": {
     "battery_rule": {
-      "rule": "flag when battery_pct <= 32",
-      "precision": 0.3636,
-      "recall": 0.4444,
-      "f1": 0.4,
-      "accuracy": 0.76,
+      "rule": "flag when battery_pct <= 25",
+      "precision": 0.3333,
+      "recall": 0.1111,
+      "f1": 0.1667,
+      "accuracy": 0.8,
       "confusion_matrix": {
-        "true_negative": 34,
-        "false_positive": 7,
-        "false_negative": 5,
-        "true_positive": 4
+        "true_negative": 39,
+        "false_positive": 2,
+        "false_negative": 8,
+        "true_positive": 1
       },
-      "pr_auc": 0.2616,
-      "roc_auc": 0.6369
+      "pr_auc": 0.197,
+      "roc_auc": 0.5312
     },
     "always_predict_success": {
       "accuracy": 0.82,
@@ -125,52 +163,57 @@
   "feature_importance": [
     {
       "feature": "battery_pct",
-      "importance": 0.0518
-    },
-    {
-      "feature": "configuration_version",
-      "importance": 0.0063
-    },
-    {
-      "feature": "location_id",
-      "importance": 0.0031
-    },
-    {
-      "feature": "asset_type",
-      "importance": 0.002
-    },
-    {
-      "feature": "environment",
-      "importance": -0.001
-    },
-    {
-      "feature": "asset_criticality",
-      "importance": -0.0075
+      "importance": 0.1947
     },
     {
       "feature": "floor",
-      "importance": -0.0082
+      "importance": 0.057
+    },
+    {
+      "feature": "asset_type",
+      "importance": 0.0541
+    },
+    {
+      "feature": "asset_criticality",
+      "importance": 0.0512
+    },
+    {
+      "feature": "environment",
+      "importance": 0.0252
     },
     {
       "feature": "zone_type",
-      "importance": -0.0083
+      "importance": 0.0172
     },
     {
-      "feature": "sequence",
-      "importance": -0.0122
+      "feature": "configuration_version",
+      "importance": 0.0154
     },
     {
       "feature": "action_type",
-      "importance": -0.1015
+      "importance": 0.0022
+    },
+    {
+      "feature": "sequence",
+      "importance": -0.006
+    },
+    {
+      "feature": "location_id",
+      "importance": -0.0458
     }
   ],
   "mean_predicted_risk_by_configuration": {
-    "V1": 0.3799,
-    "V2": 0.2094
+    "V1": 0.4649,
+    "V2": 0.1771
+  },
+  "what_if_v2_as_v1": {
+    "v2_actions": 90,
+    "mean_risk_as_v2": 0.1771,
+    "mean_risk_if_v1": 0.1303
   },
   "inference_latency_ms": {
-    "single_action": 20.77,
-    "per_action_in_a_batch": 0.098
+    "single_action": 2.13,
+    "per_action_in_a_batch": 0.013
   },
-  "shipped_model": "refit on all missions with the selected settings; test numbers above are from the held-out split"
+  "shipped_model": "refit on train + test missions with the selected settings; test numbers above are from the held-out test split, and live missions were never used"
 }

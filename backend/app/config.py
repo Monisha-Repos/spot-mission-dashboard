@@ -74,6 +74,12 @@ class Settings:
         # Without OPS_SECRET, sign-ins last until the server restarts.
         self.ops_secret = v.get("OPS_SECRET") or secrets.token_hex(32)
         self.ingest_api_key = v.get("INGEST_API_KEY", "")
+        # The Java ingest API, which runs the presenter-mode live feed (the Operator Console drives it through /ops/live).
+        self.ingest_url = v.get("INGEST_URL", "http://localhost:8081").rstrip("/")
+
+        # Hugging Face repos with the published dataset splits and model, linked from the Data Analysis tab.
+        self.hf_dataset_repo = v.get("HF_DATASET_REPO", "")
+        self.hf_model_repo = v.get("HF_MODEL_REPO", "")
 
         # AI assistant: anthropic, huggingface or none (answers with the matching records only).
         provider = (v.get("ASK_PROVIDER") or "").lower()
@@ -88,6 +94,17 @@ class Settings:
         self.anthropic_model = v.get("ANTHROPIC_MODEL", "claude-opus-5-5")
         self.ask_effort = v.get("ASK_EFFORT", "low")
         self.hf_token = v.get("HF_TOKEN", "")
-        self.hf_chat_model = v.get("HF_CHAT_MODEL", "Qwen/Qwen2.5-7B-Instruct")
+        # Strong instruct model that answers without a thinking phase; the small fallback covers provider outages.
+        self.hf_chat_model = v.get("HF_CHAT_MODEL", "Qwen/Qwen3-235B-A22B-Instruct-2507")
+        self.hf_fallback_model = v.get("HF_FALLBACK_MODEL", "meta-llama/Llama-3.1-8B-Instruct")
+        # Inference provider for the main model ("auto" lets Hugging Face pick); pinning one keeps the price predictable.
+        self.hf_provider = v.get("HF_PROVIDER", "deepinfra")
+        # Spend guard for paid inference: once the estimated spend this month reaches the budget, /ask answers with
+        # the matching records only. Spend is kept in ASK_SPEND_FILE so it survives restarts.
+        self.ask_budget_usd = float(v.get("ASK_BUDGET_USD", "5"))
+        self.ask_spend_file = path("ASK_SPEND_FILE", REPO_DIR / "data" / "ask_spend.json")
+        # Per-visitor limits on LLM questions (cached answers and the no-LLM fallback don't count).
+        self.ask_per_minute = int(v.get("ASK_PER_MINUTE", "6"))
+        self.ask_per_hour = int(v.get("ASK_PER_HOUR", "40"))
 
         self.cors_origins = [o.strip() for o in v.get("CORS_ORIGINS", "*").split(",") if o.strip()]

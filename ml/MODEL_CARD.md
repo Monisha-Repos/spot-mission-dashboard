@@ -22,31 +22,42 @@ Built for the Knight Hacks 2026 SPOT Operational Intelligence Challenge, as part
 ## What it predicts
 
 - **Target:** Will this action fail? (actions.status == FAILED), predicted before the action runs
-- **Model:** scikit-learn `random_forest` in a pipeline (one-hot encoding + scaling), decision threshold
-  **0.5133** (chosen to maximize F1 on training data).
+- **Model:** scikit-learn `logistic_regression` in a pipeline (one-hot encoding + scaling), decision threshold
+  **0.5953** (chosen to maximize F1 on training data).
 - **Inputs (all known before the action starts, so nothing leaks from the outcome):**
   - categorical: `action_type`, `location_id`, `environment`, `zone_type`, `asset_type`, `asset_criticality`, `configuration_version`
   - numeric: `battery_pct`, `sequence`, `floor`
 
 ## How it was evaluated
 
-- 80/20 by mission (StratifiedGroupKFold, stratified on scenario x outcome), seed 42: 220 training actions, 50 test actions
-  (9 failures) from 5 held-out missions. No mission is in both sets.
+- Fixed split by mission, published as [<your-username>/spot-mission-actions](https://huggingface.co/datasets/<your-username>/spot-mission-actions)
+  (revision `splits-v1`): by mission; live = the last 4 IMPROVED missions by start time (never trained on, streamed in the demo); test = 1 of 5 StratifiedGroupKFold folds of the rest (stratified on scenario x outcome, seed 42); train = the remaining missions.
+- 180 training actions, 50 test actions (9 failures) from
+  5 test missions, and 40 live actions from 4
+  missions (M024, M025, M026, M027) that were never used. No mission is in two sets.
 - Model choice, threshold and the baseline rule were fit on training data only (5-fold grouped cross-validation).
-- The shipped model is refit on all missions with the same settings; the numbers below are from the held-out split.
+- The shipped model is refit on train + test with the same settings. The live missions stay unseen: the dashboard
+  scores the model on them as they stream in during the demo.
 
-| Held-out test | This model | Battery rule (flag when battery_pct <= 32) |
+| Held-out test | This model | Battery rule (flag when battery_pct <= 25) |
 |---|---|---|
-| Precision | 0.4444 | 0.3636 |
-| Recall | 0.4444 | 0.4444 |
-| F1 | **0.4444** | 0.4 |
-| PR-AUC | **0.3247** | 0.2616 |
-| ROC-AUC | 0.6694 | 0.6369 |
+| Precision | 0.2778 | 0.3333 |
+| Recall | 0.5556 | 0.1111 |
+| F1 | **0.3704** | 0.1667 |
+| PR-AUC | **0.4209** | 0.197 |
+| ROC-AUC | 0.7073 | 0.5312 |
 
-Cross-validation on the training missions: PR-AUC 0.5053 ± 0.1293, F1 0.4438 ± 0.1753.
+Cross-validation on the training missions: PR-AUC 0.5084 ± 0.1814, F1 0.4431 ± 0.0638.
 
-Confusion matrix (test): 4 failures caught, 5 missed, 5 false alarms,
-36 correct "will succeed".
+By configuration (test set; V2 has few failures, so its numbers are very noisy):
+
+| Configuration | Actions | Failures | Precision | Recall | F1 |
+|---|---|---|---|---|---|
+| V1 | 40 | 8 | 0.2778 | 0.625 | 0.3846 |
+| V2 | 10 | 1 | 0.0 | 0.0 | 0.0 |
+
+Confusion matrix (test): 5 failures caught, 4 missed, 13 false alarms,
+28 correct "will succeed".
 
 Accuracy is not the headline: always predicting "will succeed" already scores 0.82
 because only 18% of actions fail.
@@ -55,26 +66,30 @@ because only 18% of actions fail.
 
 | Feature | Importance |
 |---|---|
-| `battery_pct` | +0.0518 |
-| `configuration_version` | +0.0063 |
-| `location_id` | +0.0031 |
-| `asset_type` | +0.0020 |
-| `environment` | -0.0010 |
-| `asset_criticality` | -0.0075 |
-| `floor` | -0.0082 |
-| `zone_type` | -0.0083 |
-| `sequence` | -0.0122 |
-| `action_type` | -0.1015 |
+| `battery_pct` | +0.1947 |
+| `floor` | +0.0570 |
+| `asset_type` | +0.0541 |
+| `asset_criticality` | +0.0512 |
+| `environment` | +0.0252 |
+| `zone_type` | +0.0172 |
+| `configuration_version` | +0.0154 |
+| `action_type` | +0.0022 |
+| `sequence` | -0.0060 |
+| `location_id` | -0.0458 |
 
-Battery level is by far the strongest signal. Average predicted risk is **38% for V1** actions and
-**21% for V2**, matching the improvement seen in the data.
+Battery level is by far the strongest signal. Average predicted risk is **46% for V1** actions and
+**18% for V2**.
 
-Inference: 20.77 ms for one action, 0.098 ms per action in a batch (laptop CPU).
+What-if: the 90 V2 actions scored as if they had run on V1 (same battery, waypoint and action)
+average 13% risk, against 18% as V2. The configuration label on its own
+does not lower predicted risk; most of the V1 to V2 difference comes with the conditions V2 ran in, chiefly battery level.
+
+Inference: 2.13 ms for one action, 0.013 ms per action in a batch (laptop CPU).
 
 ## Limitations
 
 - Very small, synthetic dataset; the test set has only 9 failures, so the test numbers are noisy.
-  The model only modestly beats a one-line battery rule.
+  Compare it with the battery-rule baseline above rather than reading the numbers as absolute.
 - Waypoints, assets and configurations outside the training data are encoded as "unknown".
 - Not a safety system: use it to prioritize what to look at, not to skip inspections.
 

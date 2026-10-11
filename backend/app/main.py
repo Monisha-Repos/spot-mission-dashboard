@@ -13,12 +13,12 @@ import threading
 from contextlib import asynccontextmanager
 from typing import Literal
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import analytics, domain
+from . import analytics, domain, evaluation, live
 from .assistant import Assistant
 from .config import Settings
 from .lakehouse import LakehouseError
@@ -93,7 +93,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return {"status": "ok" if ds else "no data", "lakehouse": settings.lakehouse, "source": ds.source if ds else None,
                 "loaded_at": ds.loaded_at if ds else None, "missions": len(ds.missions) if ds else 0,
                 "model_loaded": risk_model is not None, "ask_provider": settings.ask_provider,
-                "ops_enabled": ops is not None}
+                "ask_usage": assistant.usage(), "ingest_url": settings.ingest_url, "ops_enabled": ops is not None}
 
     @app.post("/admin/refresh", tags=["system"])
     def refresh():
@@ -199,8 +199,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/compare", tags=["insights"])
     def compare():
-        """BASELINE (V1) vs IMPROVED (V2), with significance tests."""
-        return analytics.compare_configurations(data())
+        """BASELINE (V1) vs IMPROVED (V2), with significance tests, mission-level confidence ranges and a
+        like-for-like comparison (battery level, action type and waypoint held the same)."""
+        ds = data()
+        return {**analytics.compare_configurations(ds), "detail": evaluation.improvement(ds)}
 
     @app.get("/insights", tags=["insights"])
     def insights():
@@ -219,6 +221,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if not metrics():
             raise HTTPException(404, "no ml/metrics.json; run python ml/train.py")
         return metrics()
+
+    @app.get("/model/live", tags=["model"])
+    def model_live():
+        """The model on the live missions it never trained on, as many as have arrived so far."""
+        return {**evaluation.live_model(data(), metrics(), risk_model.threshold if risk_model else None),
+                "dataset_repo": settings.hf_dataset_repo or None, "model_repo": settings.hf_model_repo or None}
+
+    @app.get("/live/script", tags=["live"])
+    def live_script():
+        """The IMPROVED missions as timed events, for the dashboard's sandbox mode (played in the visitor's browser)."""
+        return live.script(settings.kit_dir)
 
     @app.post("/predict", tags=["model"])
     def predict(body: PredictRequest):
@@ -241,8 +254,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "model": risk_model.info}
 
     @app.post("/ask", tags=["assistant"])
-    def ask(body: AskRequest):
-        return assistant.ask(data(), metrics(), body.question, body.mode, body.context)
+    def ask(body: AskRequest, request: Request):
+        # Behind a proxy the visitor's address is the first X-Forwarded-For entry.
+        client = (request.headers.get("x-forwarded-for", "").split(",")[0].strip()
+                  or (request.client.host if request.client else "anonymous"))
+        return assistant.ask(data(), metrics(), body.question, body.mode, body.context, client=client)
 
     if ops:
         from .ops.router import build_router

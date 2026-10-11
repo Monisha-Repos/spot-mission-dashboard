@@ -9,6 +9,11 @@ test('numbers and percentages', () => {
   assert.equal(num(0.4444, 3), '0.444');
   assert.equal(num(2.5), '2.5');
   assert.equal(num(null), '—');
+  // Rounding to whole numbers must not eat the zeros of the integer part.
+  assert.equal(num(59.53, 0), '60');
+  assert.equal(num(70.4, 0), '70');
+  assert.equal(num(100.04, 1), '100');
+  assert.equal(num(2.50, 2), '2.5');
 });
 
 test('readings carry their unit', () => {

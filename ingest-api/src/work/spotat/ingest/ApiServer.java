@@ -6,10 +6,6 @@ import com.sun.net.httpserver.HttpServer;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.ArrayList;
@@ -25,23 +21,30 @@ import java.util.concurrent.Executors;
  *   GET  /health            liveness + which sink is in use
  *   GET  /ingest/status     row counts and missions per scenario
  *   POST /ingest/missions   add one mission bundle (X-API-Key required when INGEST_API_KEY is set)
- *   GET  /events            Server-Sent Events: mission_ingested, with the alerts that need an operator
+ *   GET  /events            Server-Sent Events: mission_ingested (with the alerts that need an operator),
+ *                           live (one mission event as it happens), live_status, live_reset
+ *   GET  /live/status       what the live feed is doing
+ *   POST /live/start        {"speed": 60, "pause_on_alarm": true, "scenario": "IMPROVED"}
+ *   POST /live/pause | /live/resume | /live/stop | /live/reset    POST /live/speed {"speed": 120}
+ * Every POST needs X-API-Key when INGEST_API_KEY is set (the backend sends it for signed-in operators).
  */
 final class ApiServer {
     private static final int MAX_BODY_BYTES = 1 << 20;
 
     private final Sink sink;
     private final IngestService ingest;
-    private final EventHub events = new EventHub();
+    private final EventHub events;
+    private final LiveFeed live;
     private final String apiKey;
-    private final URI webhook;
-    private final HttpClient http = HttpClient.newHttpClient();
+    private final Webhook webhook;
 
-    ApiServer(Sink sink, IngestService ingest, String apiKey, String webhookUrl) {
+    ApiServer(Sink sink, IngestService ingest, EventHub events, LiveFeed live, String apiKey, Webhook webhook) {
         this.sink = sink;
         this.ingest = ingest;
+        this.events = events;
+        this.live = live;
         this.apiKey = apiKey;
-        this.webhook = webhookUrl.isEmpty() ? null : URI.create(webhookUrl);
+        this.webhook = webhook;
     }
 
     void start(int port) throws IOException {
@@ -60,10 +63,26 @@ final class ApiServer {
         headers.set("Access-Control-Allow-Headers", "Content-Type, X-API-Key");
         headers.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
         try {
+            if (method.equals("POST") && !authorized(exchange)) {
+                send(exchange, 401, Map.of("error", "missing or wrong X-API-Key"));
+                exchange.close();
+                return;
+            }
             switch (method + " " + path) {
                 case "GET /health" -> send(exchange, 200, Map.of("status", "ok", "sink", sink.describe()));
                 case "GET /ingest/status" -> send(exchange, 200, status());
                 case "POST /ingest/missions" -> postMission(exchange);
+                case "GET /live/status" -> send(exchange, 200, live.status());
+                case "POST /live/start" -> {
+                    Map<String, Object> body = jsonBody(exchange);
+                    send(exchange, 200, live.start(number(body.get("speed"), 60), !Boolean.FALSE.equals(body.get("pause_on_alarm")),
+                            String.valueOf(body.getOrDefault("scenario", "IMPROVED")).toUpperCase()));
+                }
+                case "POST /live/speed" -> send(exchange, 200, live.setSpeed(number(jsonBody(exchange).get("speed"), 60)));
+                case "POST /live/pause" -> send(exchange, 200, live.pause());
+                case "POST /live/resume" -> send(exchange, 200, live.resume());
+                case "POST /live/stop" -> send(exchange, 200, live.stop());
+                case "POST /live/reset" -> send(exchange, 202, live.reset());
                 case "GET /events" -> {
                     events.subscribe(exchange);
                     return; // stays open; EventHub owns it now
@@ -72,6 +91,12 @@ final class ApiServer {
                     if (method.equals("OPTIONS")) exchange.sendResponseHeaders(204, -1);
                     else send(exchange, 404, Map.of("error", "no route for " + method + " " + path));
                 }
+            }
+        } catch (LiveFeed.Conflict e) {
+            try {
+                send(exchange, 409, Map.of("error", e.getMessage(), "status", live.status()));
+            } catch (IOException ignored) {
+                // The client went away.
             }
         } catch (Exception e) {
             Main.log("ERROR " + method + " " + path + ": " + e);
@@ -84,13 +109,33 @@ final class ApiServer {
         exchange.close();
     }
 
-    private void postMission(HttpExchange exchange) throws Exception {
+    private boolean authorized(HttpExchange exchange) {
+        if (apiKey.isEmpty()) return true;
         String given = exchange.getRequestHeaders().getFirst("X-API-Key");
-        if (!apiKey.isEmpty() && (given == null || !MessageDigest.isEqual(apiKey.getBytes(StandardCharsets.UTF_8),
-                given.getBytes(StandardCharsets.UTF_8)))) {
-            send(exchange, 401, Map.of("error", "missing or wrong X-API-Key"));
-            return;
+        return given != null && MessageDigest.isEqual(apiKey.getBytes(StandardCharsets.UTF_8), given.getBytes(StandardCharsets.UTF_8));
+    }
+
+    /** A small JSON object body for the live controls; an empty body is {}. */
+    private static Map<String, Object> jsonBody(HttpExchange exchange) throws IOException {
+        byte[] body = exchange.getRequestBody().readNBytes(10_000);
+        if (body.length == 0) return Map.of();
+        try {
+            return Json.object(Json.parse(new String(body, StandardCharsets.UTF_8)));
+        } catch (IllegalArgumentException e) {
+            return Map.of();
         }
+    }
+
+    private static double number(Object value, double fallback) {
+        if (value instanceof Number n) return n.doubleValue();
+        try {
+            return value == null ? fallback : Double.parseDouble(value.toString());
+        } catch (NumberFormatException e) {
+            return fallback;
+        }
+    }
+
+    private void postMission(HttpExchange exchange) throws Exception {
         byte[] body = exchange.getRequestBody().readNBytes(MAX_BODY_BYTES + 1);
         if (body.length > MAX_BODY_BYTES) {
             send(exchange, 413, Map.of("error", "body larger than 1 MB; send one mission per request"));
@@ -111,7 +156,7 @@ final class ApiServer {
             Main.log("ingested " + result.body().get("mission_id") + " (" + result.body().get("scenario") + "), "
                     + alerts.size() + " alert(s), pushed to " + events.clientCount() + " dashboard(s)");
             events.publish("mission_ingested", result.body());
-            notifyWebhook(result.body());
+            webhook.send("mission_ingested", result.body());
         } else {
             Main.log("rejected mission (" + result.status() + "): " + result.body());
         }
@@ -130,23 +175,6 @@ final class ApiServer {
         body.put("latest_mission", missions.isEmpty() ? null : missions.get(missions.size() - 1).get("mission_id"));
         body.put("mission_ids", missions.stream().map(m -> m.get("mission_id")).toList());
         return body;
-    }
-
-    /** Tells the Python backend to refresh its cache and open issues for the new anomalies. Best effort. */
-    private void notifyWebhook(Map<String, Object> body) {
-        if (webhook == null) return;
-        Map<String, Object> event = new LinkedHashMap<>();
-        event.put("event", "mission_ingested");
-        event.putAll(body);
-        HttpRequest.Builder request = HttpRequest.newBuilder(webhook)
-                .header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString(Json.write(event)));
-        // The backend checks the same shared key, so only this service can raise alarms there.
-        if (!apiKey.isEmpty()) request.header("X-API-Key", apiKey);
-        http.sendAsync(request.build(), HttpResponse.BodyHandlers.discarding()).whenComplete((response, error) -> {
-            if (error != null) Main.log("webhook failed: " + error.getMessage());
-            else if (response.statusCode() >= 300) Main.log("webhook returned HTTP " + response.statusCode());
-        });
     }
 
     private static void send(HttpExchange exchange, int status, Map<String, ?> body) throws IOException {

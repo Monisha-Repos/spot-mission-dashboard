@@ -2,6 +2,8 @@ import React, { Suspense, lazy, useEffect, useMemo, useState } from 'react';
 import { asset, useApi } from '../api.js';
 import { Async, Badge, Bars, Section, Segmented, Stat } from '../components/ui.jsx';
 import InclinedMap from '../components/InclinedMap.jsx';
+import { useLive } from '../live/LiveContext.jsx';
+import { LivePanel } from '../live/LiveViews.jsx';
 import { formatTime, num, pct, reading, severityTone, titleCase, tone } from '../lib/format.js';
 
 const SpotViewer = lazy(() => import('../SpotViewer.jsx'));
@@ -109,11 +111,49 @@ function WaypointPanel({ id }) {
   );
 }
 
+/** The V1 to V2 story and the AI's track record, in two plain sentences (details are in Data Analysis). */
+function Takeaways({ detail, liveModel }) {
+  if (!detail?.available) return null;
+  const { raw, adjusted, avg_battery_at_action_pct: battery, gap } = detail;
+  const config = adjusted && adjusted.ci95[0] > 0;
+  return (
+    <ul className="takeaways">
+      <li>
+        <strong>V2 works better:</strong> steps succeed {raw.V2.success_pct}% of the time against {raw.V1.success_pct}% on V1
+        {gap.ci95[0] > 0 ? ', a gap that is very unlikely to be chance' : ''}.{' '}
+        {adjusted && (config
+          ? 'It holds even at the same battery level and waypoint, so the new configuration itself helps.'
+          : `Most of it comes from running on fuller batteries (${Math.round(battery.V2)}% vs ${Math.round(battery.V1)}% per step): at the same battery level the two are about even.`)}
+      </li>
+      {liveModel?.available && (
+        <li>
+          <strong>AI failure prediction:</strong>{' '}
+          {liveModel.arrived.length === 0
+            ? `scores every step before it runs. Its real test is the ${liveModel.live_missions.length} missions it has never seen, which arrive during the live demo.`
+            : liveModel.drift
+              ? `on ${liveModel.arrived.length} never-seen mission${liveModel.arrived.length === 1 ? '' : 's'} it caught ${liveModel.model.caught} of ${liveModel.failures} failures. V2 fails in new ways (sensor glitches at high battery), so it needs retraining on V2 data.`
+              : `caught ${liveModel.model.caught} of ${liveModel.failures} failures on ${liveModel.arrived.length} never-seen mission${liveModel.arrived.length === 1 ? '' : 's'} before they happened.`}
+        </li>
+      )}
+    </ul>
+  );
+}
+
 export default function Overview({ theme, context, setContext, onReplay }) {
   const summary = useApi('/summary');
   const waypoints = useApi('/waypoints');
   const parts = useApi('/parts');
+  const compare = useApi('/compare');
+  const modelLive = useApi('/model/live');
+  const live = useLive();
   const [stance, setStance] = useState('stand');
+  // While a live mission is under way Spot walks its route, and the map follows it.
+  const liveWalking = live.active && live.status?.state === 'running' && Boolean(live.run.mission_id);
+  const liveWaypoint = live.active ? live.run.location_id : null;
+  useEffect(() => {
+    const w = liveWaypoint && waypoints.data?.find(x => x.id === liveWaypoint);
+    if (w) setContext(c => (c.floor === w.floor ? c : { ...c, floor: w.floor }));
+  }, [liveWaypoint, waypoints.data, setContext]);
   const [autoRotate, setAutoRotate] = useState(false);
   const wide = useWide();
   const part = context.part || null;
@@ -133,7 +173,7 @@ export default function Overview({ theme, context, setContext, onReplay }) {
               focusPart={part}
               onPartSelect={setPart}
               partStatus={partStatus}
-              stance={stance}
+              stance={liveWalking ? 'walk' : stance}
               autoRotate={autoRotate && !part}
               shiftX={wide && !part ? 0.12 : 0}
             />
@@ -170,12 +210,14 @@ export default function Overview({ theme, context, setContext, onReplay }) {
             </div>
           </div>
           <div className="stage-controls">
-            <Segmented label="Pose" options={[['stand', 'Stand'], ['sit', 'Sit'], ['walk', 'Walk']]} value={stance} onChange={setStance} />
+            <Segmented label="Pose" options={[['stand', 'Stand'], ['sit', 'Sit'], ['walk', 'Walk']]} value={liveWalking ? 'walk' : stance} onChange={setStance} />
             <button type="button" className="btn btn-ghost btn-sm" aria-pressed={autoRotate} onClick={() => setAutoRotate(v => !v)}>Rotate</button>
           </div>
           {part && <PartPanel id={part} onClose={() => setPart(null)} />}
         </div>
       </section>
+
+      <LivePanel />
 
       <Section eyebrow="Across all missions" title="How Spot is doing" id="kpis">
         <Async state={summary}>
@@ -189,6 +231,7 @@ export default function Overview({ theme, context, setContext, onReplay }) {
             </div>
           )}
         </Async>
+        <Takeaways detail={compare.data?.detail} liveModel={modelLive.data} />
       </Section>
 
       <Section eyebrow="Facility" title="Where Spot looked" id="map" className="map-section">
@@ -201,6 +244,7 @@ export default function Overview({ theme, context, setContext, onReplay }) {
                 onFloor={f => setContext(c => ({ ...c, floor: f, waypoint: undefined }))}
                 selected={context.waypoint}
                 onSelect={id => setContext(c => ({ ...c, waypoint: id || undefined }))}
+                pulse={liveWaypoint}
               />
             )}
           </Async>

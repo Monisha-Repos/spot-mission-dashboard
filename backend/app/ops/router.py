@@ -2,13 +2,18 @@
 from __future__ import annotations
 
 import hmac
+import logging
+import threading
 from typing import Literal
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from pydantic import BaseModel, Field
 
+from ..live import IngestClient, IngestError
 from .auth import AuthError, issue_token, read_token
 from .service import OpsError, OpsService
+
+log = logging.getLogger(__name__)
 
 
 class Login(BaseModel):
@@ -33,9 +38,27 @@ class AlarmDecision(BaseModel):
     note: str = Field(default="", max_length=1000)
 
 
+class LiveStart(BaseModel):
+    speed: float = Field(default=60, ge=1, le=600)
+    pause_on_alarm: bool = True
+
+
+class LiveSpeed(BaseModel):
+    speed: float = Field(ge=1, le=600)
+
+
 def build_router(service: OpsService) -> APIRouter:
     router = APIRouter(prefix="/ops", tags=["operator console"])
     settings = service.settings
+    ingest = IngestClient(settings.ingest_url, settings.ingest_api_key)
+
+    def resume_feed_when_clear():
+        """Pause-on-alarm: once no alarm is waiting for a decision, let the live feed carry on."""
+        try:
+            if service.stats()["pending_alarms"] == 0 and ingest.status().get("state") == "waiting_for_decision":
+                ingest.control("resume")
+        except IngestError as e:
+            log.info("could not resume the live feed: %s", e)
 
     def current_user(authorization: str | None = Header(default=None)) -> dict:
         if not authorization or not authorization.startswith("Bearer "):
@@ -84,7 +107,32 @@ def build_router(service: OpsService) -> APIRouter:
 
     @router.post("/alerts/{anomaly_id}/decision")
     def decide(anomaly_id: str, body: AlarmDecision, user: dict = Depends(current_user)):
-        return run(service.decide_alert, anomaly_id, user, body.decision, body.note)
+        issue = run(service.decide_alert, anomaly_id, user, body.decision, body.note)
+        threading.Thread(target=resume_feed_when_clear, daemon=True).start()
+        return issue
+
+    # ---------- presenter-mode live feed (runs in the Java ingest API) ----------
+
+    def live(action: str, body: dict | None = None):
+        try:
+            return ingest.control(action, body)
+        except IngestError as e:
+            raise HTTPException(e.status if e.status in (409, 502) else 502, str(e)) from None
+
+    @router.post("/live/start")
+    def live_start(body: LiveStart, user: dict = Depends(current_user)):
+        """Stream the IMPROVED missions in, event by event, to every open dashboard."""
+        return live("start", {"speed": body.speed, "pause_on_alarm": body.pause_on_alarm, "scenario": "IMPROVED"})
+
+    @router.post("/live/speed")
+    def live_speed(body: LiveSpeed, user: dict = Depends(current_user)):
+        return live("speed", {"speed": body.speed})
+
+    @router.post("/live/{action}")
+    def live_control(action: Literal["pause", "resume", "stop", "reset"], user: dict = Depends(current_user)):
+        if action == "reset" and user["role"] != "supervisor":
+            raise HTTPException(403, "only a supervisor can reset the demo data")
+        return live(action)
 
     @router.get("/kpis")
     def kpis(scope: str = "all"):
@@ -121,6 +169,13 @@ def build_router(service: OpsService) -> APIRouter:
         event = await request.json()
         if not isinstance(event, dict):
             raise HTTPException(400, "expected a JSON object")
+        kind = event.get("event", "mission_ingested")
+        if kind == "live_alert":
+            # Opened right away so an operator can decide before the mission has finished and been saved.
+            return {"accepted": True, "issues": service.raise_live_alerts(event)}
+        if kind == "live_reset":
+            threading.Thread(target=service.reset, name="ops-reset", daemon=True).start()
+            return {"accepted": True, "reset": True}
         service.on_ingest(event)
         return {"accepted": True, "mission_id": event.get("mission_id")}
 

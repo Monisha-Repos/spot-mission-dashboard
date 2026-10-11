@@ -37,7 +37,7 @@ export function FloorPlane({ waypoints, selected, onSelect, pulse, compact = fal
 }
 
 /** Both floors as tilted planes; the toggle slides the active one forward. */
-export default function InclinedMap({ waypoints, floor, onFloor, selected, onSelect }) {
+export default function InclinedMap({ waypoints, floor, onFloor, selected, onSelect, pulse }) {
   return (
     <div className="map">
       <div className="map-toolbar">
@@ -61,7 +61,7 @@ export default function InclinedMap({ waypoints, floor, onFloor, selected, onSel
                 inert={offset !== 0}
               >
                 <span className="floor-tag">Floor {f}</span>
-                <FloorPlane waypoints={waypoints.filter(w => w.floor === f)} selected={selected} onSelect={onSelect} />
+                <FloorPlane waypoints={waypoints.filter(w => w.floor === f)} selected={selected} onSelect={onSelect} pulse={pulse} />
               </div>
             );
           })}

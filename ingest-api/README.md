@@ -26,7 +26,15 @@ Run `seed --reset` again before each demo run to go back to baseline only. On Da
 | GET | `/health` | Liveness check, and which storage target is in use |
 | GET | `/ingest/status` | Row counts per table, missions per scenario, latest mission |
 | POST | `/ingest/missions` | Adds one mission bundle. Returns `201`, `400` (with a list of problems, nothing written), `409` (already ingested) or `401` (bad API key) |
-| GET | `/events` | Server-Sent Events. Sends `mission_ingested` with `alerts[]` |
+| GET | `/events` | Server-Sent Events: `mission_ingested` with `alerts[]`; during a live feed also `live` (each mission event as it happens), `live_status` and `live_reset` |
+| GET | `/live/status` | What the live feed is doing: state, speed, current mission, waypoint, battery, alarm it waits on |
+| POST | `/live/start` | `{"speed": 60, "pause_on_alarm": true}`: plays the IMPROVED missions event by event to every dashboard, saving each when it completes |
+| POST | `/live/pause` · `/live/resume` · `/live/stop` · `/live/speed` `{"speed": 120}` | Control the feed (`409` when the state doesn't allow it) |
+| POST | `/live/reset` | Stops the feed and reloads reference data + BASELINE in the background (`202`); dashboards get `live_reset` |
+
+Every `POST` needs `X-API-Key` when `INGEST_API_KEY` is set. The dashboard never calls these directly: signed-in operators use
+the backend's `/ops/live/*`, which forwards with the key. Live alarms reach the backend through `INGEST_WEBHOOK_URL` the moment
+they're detected (`live_alert`), so an operator can decide before the mission is saved.
 
 **Mission bundle** (field names and formats match the kit CSVs; numbers and booleans can be JSON values or strings):
 

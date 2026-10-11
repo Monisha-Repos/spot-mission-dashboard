@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { api, asset, INGEST_URL, useApi, useApp } from '../api.js';
+import { api, asset, useApi, useApp } from '../api.js';
+import { useLive } from '../live/LiveContext.jsx';
 import { FloorPlane } from './InclinedMap.jsx';
 import LoginForm from '../modules/ops/LoginForm.jsx';
 import { formatTime, humanize, measurementLabel, num, reading, titleCase } from '../lib/format.js';
@@ -20,67 +21,64 @@ function fromIssue(i) {
   };
 }
 
-/** An alert pushed by the ingest API (raw anomaly + its readings), before the backend has caught up. */
-function fromEvent(a, event, waypoints) {
+/** An alert pushed live (raw anomaly + its readings), before the backend has the mission. */
+function fromEvent(a, waypoints, assets) {
   const w = waypoints.find(x => x.id === a.location_id);
+  const as = assets.find(x => x.id === a.asset_id);
   const r = a.readings?.[0];
   return {
-    anomaly_id: a.anomaly_id, severity: a.severity, type: a.anomaly_type, mission_id: a.mission_id || event.mission_id,
-    asset: a.asset_id, criticality: null, location_id: a.location_id, location_name: w?.name, floor: w?.floor,
+    anomaly_id: a.anomaly_id, severity: a.severity, type: a.anomaly_type, mission_id: a.mission_id,
+    asset: as ? `${as.name} (${as.id})` : a.asset_id, criticality: as?.criticality || null, location_id: a.location_id,
+    location_name: w?.name, floor: w?.floor,
     reading: r ? { label: measurementLabel(r.measurement_type), value: Number(r.value), unit: r.unit, quality: r.quality } : null,
     at: a.timestamp || new Date().toISOString(), image: imageFor(a.anomaly_type), detail: a.description,
+    sandbox: Boolean(a.sandbox), test: Boolean(a.test),
   };
 }
 
-export default function AlarmCenter({ siren, muted, onMute, onActive, onStream }) {
+export default function AlarmCenter({ siren, muted, onMute, onActive }) {
   const { session, bump } = useApp();
+  const live = useLive();
   const pending = useApi('/ops/alerts?pending=true');
   const waypoints = useApi('/waypoints');
-  const [live, setLive] = useState({});
+  const assets = useApi('/assets');
   const [done, setDone] = useState(() => new Set());
   const [index, setIndex] = useState(0);
   const [note, setNote] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
-  const [stream, setStream] = useState('connecting');
   const box = useRef(null);
-  const wpRef = useRef([]);
-  wpRef.current = waypoints.data || [];
-
-  // Live missions from the Java ingest API. Every event refreshes all data views.
-  useEffect(() => {
-    if (typeof EventSource === 'undefined') return;
-    const es = new EventSource(`${INGEST_URL}/events`);
-    let timer = 0;
-    es.onopen = () => setStream('live');
-    es.onerror = () => setStream('offline');
-    es.addEventListener('mission_ingested', e => {
-      let event;
-      try { event = JSON.parse(e.data); } catch { return; }
-      setLive(prev => {
-        const next = { ...prev };
-        for (const a of event.alerts || []) next[a.anomaly_id] = fromEvent(a, event, wpRef.current);
-        return next;
-      });
-      bump();
-      // The backend reloads through its webhook; refresh again once it has.
-      clearTimeout(timer);
-      timer = setTimeout(bump, 2500);
-    });
-    return () => { clearTimeout(timer); es.close(); };
-  }, [bump]);
 
   const queue = useMemo(() => {
-    const byId = new Map(Object.values(live).map(a => [a.anomaly_id, a]));
-    for (const i of pending.data || []) if (i.source_type === 'ANOMALY') byId.set(i.source_id, fromIssue(i));
+    const byId = new Map(Object.values(live.alerts).map(a => [a.anomaly_id, fromEvent(a, waypoints.data || [], assets.data || [])]));
+    // The backend's version is richer once the mission has been saved; until then keep the live one.
+    for (const i of pending.data || []) {
+      if (i.source_type === 'ANOMALY' && (!byId.has(i.source_id) || i.location_name)) byId.set(i.source_id, fromIssue(i));
+    }
     return [...byId.values()].filter(a => !done.has(a.anomaly_id));
-  }, [live, pending.data, done]);
+  }, [live.alerts, pending.data, waypoints.data, assets.data, done]);
 
   const current = queue[Math.min(index, queue.length - 1)];
   const active = Boolean(current);
+  const shared = queue.some(a => !a.sandbox);
+
+  // Someone may decide a shared alarm in another tab: check every few seconds while one is showing here.
+  const { dismiss } = live;
+  useEffect(() => {
+    if (!shared) return undefined;
+    const timer = setInterval(() => {
+      api('/ops/alerts?pending=false').then(rows => {
+        const decided = rows.filter(i => i.decided_at).map(i => i.source_id);
+        if (decided.length) {
+          dismiss(decided);
+          setDone(d => { const n = new Set(d); decided.forEach(x => n.add(x)); return n; });
+        }
+      }, () => {});
+    }, 3000);
+    return () => clearInterval(timer);
+  }, [shared, dismiss]);
 
   useEffect(() => { onActive?.(active); }, [active, onActive]);
-  useEffect(() => { onStream?.(stream); }, [stream, onStream]);
   useEffect(() => {
     if (active && siren && !muted) siren.start();
     else siren?.stop();
@@ -92,11 +90,17 @@ export default function AlarmCenter({ siren, muted, onMute, onActive, onStream }
   if (!current) return null;
 
   async function decide(decision) {
+    if (current.sandbox) {
+      live.resolveLocal(current.anomaly_id);
+      setIndex(0);
+      return;
+    }
     setBusy(true);
     setError('');
     try {
       await api(`/ops/alerts/${current.anomaly_id}/decision`, { method: 'POST', body: { decision, note }, token: session?.token });
       setDone(d => new Set(d).add(current.anomaly_id));
+      live.dismiss([current.anomaly_id]);
       setIndex(0);
       bump();
     } catch (e) {
@@ -122,7 +126,7 @@ export default function AlarmCenter({ siren, muted, onMute, onActive, onStream }
         onKeyDown={e => { if (e.key === 'Escape') e.preventDefault(); }}
       >
         <header className="alarm-head">
-          <span className="alarm-count">{queue.length > 1 ? `${Math.min(index, queue.length - 1) + 1} of ${queue.length}` : 'Live alarm'}</span>
+          <span className="alarm-count">{queue.length > 1 ? `${Math.min(index, queue.length - 1) + 1} of ${queue.length}` : current.test ? 'Practice alarm' : current.sandbox ? 'Sandbox alarm' : 'Live alarm'}</span>
           {queue.length > 1 && (
             <span className="alarm-nav">
               <button type="button" className="btn btn-ghost btn-sm" onClick={() => setIndex(i => (i - 1 + queue.length) % queue.length)}>Previous</button>
@@ -158,7 +162,15 @@ export default function AlarmCenter({ siren, muted, onMute, onActive, onStream }
           </div>
         </div>
 
-        {session ? (
+        {current.sandbox ? (
+          <div className="alarm-actions">
+            <p className="muted">{current.test ? 'Practice alarm on this screen only.' : 'Sandbox: your decision stays in this browser and the replay carries on.'}</p>
+            <div className="alarm-buttons">
+              <button type="button" className="btn btn-ghost" onClick={() => decide('OVERRIDE')}>✅ Not a problem (override)</button>
+              <button type="button" className="btn btn-danger" onClick={() => decide('DANGER')}>🚨 Mark as danger</button>
+            </div>
+          </div>
+        ) : session ? (
           <div className="alarm-actions">
             <label className="field">
               <span className="field-label">Reason / note (required for “Not a problem”)</span>

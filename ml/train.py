@@ -8,12 +8,13 @@ so nothing that is measured during or after the action leaks into the features.
     python ml/train.py
 
 Method (see TODO.md "P1: Model Training"):
-  - 80/20 split by mission (no mission in both sets), stratified so both sets hold
-    BASELINE and IMPROVED missions and failures; seed 42.
+  - Fixed split by mission from ml/splits.json (see build_dataset.py, which also publishes it to the
+    Hugging Face Hub): train, test (about 20%), and live (the last 4 IMPROVED missions, never trained on;
+    the dashboard scores the model on them as they stream in during the demo).
   - Candidates are compared with 5-fold grouped cross-validation on the training set only;
     the decision threshold and the battery-rule baseline are also fit on training data only.
-  - The held-out 20% is scored once. The shipped model is then refit on all missions with the
-    chosen settings; metrics.json reports the held-out numbers.
+  - The test set is scored once, overall and per configuration (V1 / V2). The shipped model is then refit on
+    train + test with the chosen settings; live missions stay unseen.
 """
 from __future__ import annotations
 
@@ -119,15 +120,19 @@ def scores(y, p, threshold):
 
 
 def main():
+    from build_dataset import splits
+    split = splits()
     rows = build_rows()
     X, y = matrix(rows), np.array([r["failed"] for r in rows])
     groups = np.array([r["mission_id"] for r in rows])
     strata = np.array([f"{r['scenario']}_{r['failed']}" for r in rows])
 
-    # 80/20 grouped + stratified split: the first of 5 folds is the held-out test set.
-    train_idx, test_idx = next(StratifiedGroupKFold(5, shuffle=True, random_state=SEED).split(X, strata, groups))
+    train_idx = np.flatnonzero(np.isin(groups, split["train"]))
+    test_idx = np.flatnonzero(np.isin(groups, split["test"]))
+    known_idx = np.concatenate([train_idx, test_idx])
     Xtr, ytr, gtr, str_ = X[train_idx], y[train_idx], groups[train_idx], strata[train_idx]
     Xte, yte = X[test_idx], y[test_idx]
+    config_te = np.array([rows[i]["configuration_version"] for i in test_idx])
 
     # 5-fold grouped CV on the training set only, for each candidate.
     cv = list(StratifiedGroupKFold(5, shuffle=True, random_state=SEED).split(Xtr, str_, gtr))
@@ -165,8 +170,15 @@ def main():
     importance = sorted(({"feature": f, "importance": round(float(m), 4)} for f, m in zip(FEATURES, imp.importances_mean)),
                         key=lambda d: -d["importance"])
 
-    # Ship a model refit on every mission, with the same settings and threshold.
-    final = pipeline(CANDIDATES[chosen]()).fit(X, y)
+    # Per configuration: is the model as good on V2 actions as on V1? (Small samples: read with care.)
+    by_config = {}
+    for cfg in sorted(set(config_te.tolist())):
+        mask = config_te == cfg
+        by_config[cfg] = {"actions": int(mask.sum()), "failures": int(yte[mask].sum()),
+                          **scores(yte[mask], p_test[mask], threshold)}
+
+    # Ship a model refit on train + test with the same settings and threshold. Live missions stay unseen.
+    final = pipeline(CANDIDATES[chosen]()).fit(X[known_idx], y[known_idx])
     start = time.perf_counter()
     for i in range(500):
         final.predict_proba(X[i % len(X): i % len(X) + 1])
@@ -178,6 +190,13 @@ def main():
     p_all = final.predict_proba(X)[:, 1]
     risk_by_config = {v: round(float(p_all[[r["configuration_version"] == v for r in rows]].mean()), 4)
                       for v in sorted({r["configuration_version"] for r in rows})}
+    # What-if: the V2 actions scored as if they had run on V1. The gap is what the configuration itself explains,
+    # with battery, waypoint and action held the same.
+    v2 = np.flatnonzero([r["configuration_version"] == "V2" for r in rows])
+    as_v1 = X[v2].copy()
+    as_v1[:, FEATURES.index("configuration_version")] = "V1"
+    what_if = {"v2_actions": int(len(v2)), "mean_risk_as_v2": round(float(p_all[v2].mean()), 4),
+               "mean_risk_if_v1": round(float(final.predict_proba(as_v1)[:, 1].mean()), 4)}
 
     trained_at = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
     joblib.dump({
@@ -197,15 +216,17 @@ def main():
             "failure_rate": round(float(y.mean()), 4),
         },
         "split": {
-            "method": "80/20 by mission (StratifiedGroupKFold, stratified on scenario x outcome), seed 42",
-            "train_missions": sorted(set(gtr.tolist())), "test_missions": sorted(set(groups[test_idx].tolist())),
+            "method": split["method"], "revision": split["revision"],
+            "train_missions": split["train"], "test_missions": split["test"], "live_missions": split["live"],
             "train_actions": len(train_idx), "test_actions": len(test_idx),
+            "live_actions": int(len(rows) - len(known_idx)),
             "test_failures": int(yte.sum()),
         },
         "cross_validation": {"method": "5-fold StratifiedGroupKFold on the training set", "candidates": cv_results,
                              "selected": chosen, "selected_by": "highest mean PR-AUC"},
         "decision_threshold": threshold,
         "test": scores(yte, p_test, threshold),
+        "test_by_configuration": by_config,
         "baselines": {
             "battery_rule": {"rule": f"flag when battery_pct <= {rule_threshold:g}",
                              **scores(yte, rule_test, 0.5)},
@@ -213,9 +234,11 @@ def main():
         },
         "feature_importance": importance,
         "mean_predicted_risk_by_configuration": risk_by_config,
+        "what_if_v2_as_v1": what_if,
         "inference_latency_ms": {"single_action": round(latency_ms, 2),
                                  "per_action_in_a_batch": round(batch_ms, 3)},
-        "shipped_model": "refit on all missions with the selected settings; test numbers above are from the held-out split",
+        "shipped_model": ("refit on train + test missions with the selected settings; test numbers above are from the "
+                          "held-out test split, and live missions were never used"),
     }
     (OUT / "metrics.json").write_text(json.dumps(metrics, indent=2) + "\n")
 
@@ -223,6 +246,8 @@ def main():
     for n, r in cv_results.items():
         print(f"  cv {n:20} {r}")
     print("test  model  ", metrics["test"])
+    print("test  by cfg ", {k: (v["actions"], v["failures"], v["f1"]) for k, v in by_config.items()})
+    print("what-if      ", what_if)
     print("test  battery", metrics["baselines"]["battery_rule"])
     print("importance   ", importance[:5])
     print("risk by config", risk_by_config, f"latency {latency_ms:.2f} ms single, {batch_ms:.3f} ms/action batched")

@@ -48,8 +48,9 @@ waiting for a decision, and saves an automatic snapshot.
 | Map | `GET /waypoints?floor=` · `/waypoints/{id}` | Colour status (last 5 missions), failure rates by configuration, assets, predicted risk, open issues |
 | 3D model | `GET /parts` · `/parts/{id}` | What each Spot part (thermal camera, PTZ camera, microphone, legs, radio, battery) measured |
 | Equipment | `GET /assets` · `/assets/{id}` | Per-asset history and reading trend |
-| Insights | `GET /insights` · `/compare` · `/kpis?scope=all\|V1\|V2` | Answers to the challenge's questions with evidence · V1 vs V2 with significance tests · KPIs |
-| Model | `GET /metrics` · `POST /predict` | Held-out test metrics · failure risk for an action about to run |
+| Insights | `GET /insights` · `/compare` · `/kpis?scope=all\|V1\|V2` | Answers to the challenge's questions with evidence · V1 vs V2 with significance tests, mission-level 95% ranges and a like-for-like comparison (`detail`) · KPIs |
+| Model | `GET /metrics` · `GET /model/live` · `POST /predict` | Train / test / live split and test metrics (overall and per configuration) · the model on never-seen live missions as they arrive, with a drift warning · failure risk for an action about to run |
+| Live | `GET /live/script` | The IMPROVED missions as timed events, for the dashboard's sandbox mode |
 | AI | `POST /ask` `{question, mode: simple\|technical, context}` | Answer citing record IDs, plus the sources used |
 | Ops | see below | Operator Console |
 | Images | `GET /static/maps/…` · `/static/inspection-images/…` | Floor plans and inspection images |
@@ -67,7 +68,10 @@ Reads are open. Writes need a token from `POST /ops/login {name, role: operator|
 | `GET /ops/kpis` · `GET /ops/activity?asset=&location=` | KPIs plus issue stats (MTTR, alarm response time) · activity feed |
 | `GET /ops/snapshots` · `POST /ops/snapshots` `{label, note}` · `GET /ops/snapshots/{id}` | History timeline · save a snapshot · full KPIs |
 | `GET /ops/snapshots/compare?a=&b=&scope_a=&scope_b=` | Every KPI marked improved ▲ / degraded ▼ (e.g. `scope_a=V1&scope_b=V2`) |
-| `POST /ops/ingest-hook` | Called by the Java ingest API after each live mission |
+| `POST /ops/live/start` `{speed, pause_on_alarm}` · `/ops/live/{pause,resume,stop}` · `/ops/live/speed` · `/ops/live/reset` (supervisor) | Drive the presenter-mode live feed in the Java ingest API (`INGEST_URL`) |
+| `POST /ops/ingest-hook` | Called by the Java ingest API: `mission_ingested` (refresh, issues, snapshot), `live_alert` (open an alarm mid-mission), `live_reset` (fresh Operator Console) |
+
+With pause-on-alarm, deciding the last waiting alarm resumes the live feed automatically.
 
 The audit trail (`issue_events`) and saved snapshots are protected by SQLite triggers: they can be added but never
 edited or deleted. `python manage.py reset-ops` deletes the whole database for a fresh demo.
@@ -90,13 +94,20 @@ edited or deleted. `python manage.py reset-ops` deletes the whole database for a
 2. **Guardrail:** questions that mention nothing from this domain get "I don't have data on that." without an LLM call.
 3. **Answer:** one LLM call that must answer only from the retrieved records and cite their IDs.
    - `anthropic`: Claude Opus 5.5 (`claude-opus-5-5`), effort `low`, with server-side refusal fallback enabled.
-   - `huggingface`: `HF_CHAT_MODEL` through Hugging Face Inference.
+   - `huggingface`: `HF_CHAT_MODEL` (default `Qwen/Qwen3-235B-A22B-Instruct-2507` on `HF_PROVIDER=deepinfra`) through
+     Hugging Face Inference Providers, falling back to `HF_FALLBACK_MODEL` (`meta-llama/Llama-3.1-8B-Instruct`) if it fails.
    - `none`, or if the call fails: the matching records are listed instead.
+4. **Spend guard** (for paid inference on a public site): identical questions come from a cache; each visitor gets
+   `ASK_PER_MINUTE` (6) and `ASK_PER_HOUR` (40) LLM answers; once this month's estimated spend reaches `ASK_BUDGET_USD` (5) the
+   assistant lists records instead. Spend is estimated from each response's token counts and the router's public price list,
+   kept in `ASK_SPEND_FILE` (`data/ask_spend.json`) and shown in `GET /health` as `ask_usage`.
 
 ## Failure-risk model
 
-`ml/model.joblib` is loaded from disk at startup; the app never downloads it. Retrain with `python ml/train.py`,
-and publish to the Hugging Face Hub with `python ml/push_to_hub.py` (see [ml/MODEL_CARD.md](../ml/MODEL_CARD.md)).
+`ml/model.joblib` is loaded from disk at startup; the app never downloads it. The data is split once by mission into train,
+test and live (`ml/splits.json`, written by `python ml/build_dataset.py`, which can also publish it as a Hugging Face dataset).
+Retrain with `python ml/train.py`, and publish with `python ml/push_to_hub.py` (see [ml/MODEL_CARD.md](../ml/MODEL_CARD.md)).
+The live missions are never trained on: `GET /model/live` scores the model on them as they stream in during the demo.
 
 ## Tests
 

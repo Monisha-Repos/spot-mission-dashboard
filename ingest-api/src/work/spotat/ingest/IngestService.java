@@ -96,19 +96,25 @@ final class IngestService {
     private static List<Map<String, Object>> alerts(List<Map<String, String>> anomalies, List<Map<String, String>> readings) {
         List<Map<String, Object>> alerts = new ArrayList<>();
         for (Map<String, String> anomaly : anomalies) {
-            if (!ALARM_SEVERITIES.contains(anomaly.get("severity")) && !"True".equals(anomaly.get("operator_review_required"))) {
-                continue;
-            }
-            Map<String, Object> alert = new LinkedHashMap<>(anomaly);
-            alert.remove("synthetic");
-            alert.put("readings", readings.stream()
-                    .filter(r -> r.get("action_id").equals(anomaly.get("action_id")))
-                    .map(r -> Map.of("measurement_type", r.get("measurement_type"), "value", r.get("value"),
-                            "unit", r.get("unit"), "quality", r.get("quality")))
-                    .toList());
-            alerts.add(alert);
+            if (isAlarm(anomaly)) alerts.add(alert(anomaly, readings));
         }
         return alerts;
+    }
+
+    static boolean isAlarm(Map<String, String> anomaly) {
+        return ALARM_SEVERITIES.contains(anomaly.get("severity")) || "True".equalsIgnoreCase(anomaly.get("operator_review_required"));
+    }
+
+    /** One anomaly as the dashboard alarm shows it: its fields plus the readings taken in the same action. */
+    static Map<String, Object> alert(Map<String, String> anomaly, List<Map<String, String>> readings) {
+        Map<String, Object> alert = new LinkedHashMap<>(anomaly);
+        alert.remove("synthetic");
+        alert.put("readings", readings.stream()
+                .filter(r -> r.get("action_id").equals(anomaly.get("action_id")))
+                .map(r -> Map.of("measurement_type", r.get("measurement_type"), "value", r.get("value"),
+                        "unit", r.get("unit"), "quality", r.get("quality")))
+                .toList());
+        return alert;
     }
 
     private void checkChildren(Schema.Table table, List<Map<String, String>> rows, String missionId,

@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import logging
 import queue
+import sqlite3
 import statistics
 import threading
 from datetime import datetime, timezone
@@ -345,6 +346,49 @@ class OpsService:
         }
 
     # ---------- live ingest ----------
+
+    def raise_live_alerts(self, event: dict) -> list[str]:
+        """An alarm-level anomaly detected mid-mission (presenter-mode live feed). The mission isn't in the lakehouse
+        yet, so the issue is opened from the alert itself; the usual sync finds it already there once the mission lands."""
+        ds = self.store.dataset
+        raised = []
+        with self.lock, self.conn:
+            for a in event.get("alerts") or []:
+                anomaly_id = a.get("anomaly_id")
+                if not anomaly_id or self.conn.execute("SELECT 1 FROM issues WHERE source_id = ?", (anomaly_id,)).fetchone():
+                    continue
+                asset = ds.assets.get(a.get("asset_id"), {})
+                location = ds.locations.get(a.get("location_id"), {})
+                severity = a.get("severity") or "HIGH"
+                title = (f"{severity.capitalize()} {domain.humanize(a.get('anomaly_type'))} on "
+                         f"{asset.get('asset_name', a.get('asset_id'))} ({location.get('location_name', a.get('location_id'))})")
+                issue_id, stamp = f"ISS-{anomaly_id}", now()
+                self.conn.execute(
+                    "INSERT INTO issues (issue_id, source_type, source_id, mission_id, action_id, location_id, asset_id, severity, "
+                    "title, pending_decision, alert_at, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,1,?,?,?)",
+                    (issue_id, "ANOMALY", anomaly_id, a.get("mission_id") or event.get("mission_id"), a.get("action_id"),
+                     a.get("location_id"), a.get("asset_id"), severity, title, stamp, stamp, stamp))
+                self._event(issue_id, "CREATED", None, "OPEN", f"Raised from live anomaly {anomaly_id}", SYSTEM_USER)
+                self._event(issue_id, "ALARM_RAISED", None, None, "Live alarm raised mid-mission by the ingest API", SYSTEM_USER)
+                raised.append(issue_id)
+        return raised
+
+    def reset(self):
+        """Fresh Operator Console for a new demo run: the same as `manage.py reset-ops` followed by a restart."""
+        with self.lock:
+            self.conn.close()
+            db = self.settings.ops_db
+            for p in (db, db.with_name(db.name + "-wal"), db.with_name(db.name + "-shm")):
+                p.unlink(missing_ok=True)
+            self.conn = connect(db)
+        try:
+            ds = self.store.refresh()
+            self.sync_issues(ds)
+            self.seed_snapshots(ds)
+        except sqlite3.ProgrammingError:  # the server shut down mid-reset; the next start rebuilds it anyway
+            log.warning("operator console reset interrupted by shutdown")
+            return
+        log.info("operator console reset: %d missions, baseline snapshots re-seeded", len(ds.missions))
 
     def on_ingest(self, event: dict):
         """Called by POST /ops/ingest-hook. Work happens on a background thread so the ingest API isn't kept waiting."""

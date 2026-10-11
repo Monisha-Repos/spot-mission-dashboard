@@ -3,7 +3,7 @@ import { useApi } from '../api.js';
 import { Async, Badge, Section, Segmented, Stat } from '../components/ui.jsx';
 import DataTable from '../components/DataTable.jsx';
 import { downloadReport } from '../lib/report.js';
-import { kpiLabel, num, severityTone, tone } from '../lib/format.js';
+import { kpiLabel, num, severityTone, titleCase, tone } from '../lib/format.js';
 
 const statusCell = r => <Badge tone={tone(r.status)}>{r.status}</Badge>;
 
@@ -115,6 +115,46 @@ const WAYPOINT_COLUMNS = [
   { key: 'status', label: 'Status', render: statusCell },
 ];
 
+const signed = v => `${v > 0 ? '+' : ''}${num(v, 1)}`;
+const range = ci => `${signed(ci[0])} to ${signed(ci[1])}`;
+
+/** How sure we are that V2 is better, and how much of it is the configuration itself. */
+function Evidence({ detail }) {
+  if (!detail?.available) return null;
+  const { raw, gap, adjusted, avg_battery_at_action_pct: battery } = detail;
+  return (
+    <>
+      <h3>How sure are we?</h3>
+      <p>{detail.summary}</p>
+      <div className="table-scroll">
+        <table>
+          <caption className="sr-only">Action success with 95% ranges, raw and like for like</caption>
+          <thead><tr><th scope="col">Comparison</th><th scope="col" className="num">V1</th><th scope="col" className="num">V2</th><th scope="col" className="num">Gap (points)</th><th scope="col" className="num">95% range</th></tr></thead>
+          <tbody>
+            <tr>
+              <th scope="row">Action success, as observed</th>
+              <td className="num">{num(raw.V1.success_pct, 1)}% <small>({num(raw.V1.ci95[0], 1)}–{num(raw.V1.ci95[1], 1)})</small></td>
+              <td className="num">{num(raw.V2.success_pct, 1)}% <small>({num(raw.V2.ci95[0], 1)}–{num(raw.V2.ci95[1], 1)})</small></td>
+              <td className={`num ${gap.ci95[0] > 0 ? 'tone-ok' : ''}`}>{signed(gap.points)}</td>
+              <td className="num">{range(gap.ci95)}</td>
+            </tr>
+            {adjusted && (
+              <tr>
+                <th scope="row">Like for like ({adjusted.controls.join(', ')} held the same)</th>
+                <td className="num">{num(adjusted.success_pct_if_all_v1, 1)}%</td>
+                <td className="num">{num(adjusted.success_pct_if_all_v2, 1)}%</td>
+                <td className={`num ${adjusted.ci95[0] > 0 ? 'tone-ok' : ''}`}>{signed(adjusted.points)}</td>
+                <td className="num">{range(adjusted.ci95)}</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+      <p className="muted">Average battery when a step started: V1 {num(battery.V1, 0)}%, V2 {num(battery.V2, 0)}%. {detail.method}</p>
+    </>
+  );
+}
+
 function Outcomes({ compare }) {
   const { V1, V2, tests, summary, changes } = compare;
   if (!V1 || !V2) {
@@ -125,6 +165,8 @@ function Outcomes({ compare }) {
   return (
     <>
       <p className="lead">{summary}</p>
+      <Evidence detail={compare.detail} />
+      <h3>Key numbers</h3>
       <div className="table-scroll">
         <table>
           <caption className="sr-only">BASELINE (V1) vs IMPROVED (V2)</caption>
@@ -171,12 +213,28 @@ function Outcomes({ compare }) {
   );
 }
 
-function ModelMetrics({ m }) {
+function ModelMetrics({ m, links }) {
   const t = m.test, cm = t.confusion_matrix;
-  const rows = [['Random forest (selected)', t], ...Object.entries(m.baselines || {}).map(([k, b]) => [k === 'battery_rule' ? `Rule: ${b.rule}` : k.replace(/_/g, ' '), b])];
+  const rows = [[`${titleCase(m.model_type)} (selected)`, t], ...Object.entries(m.baselines || {}).map(([k, b]) => [k === 'battery_rule' ? `Rule: ${b.rule}` : k.replace(/_/g, ' '), b])];
   return (
     <>
-      <p className="lead">{m.target}. Split: {m.split.method} — {m.split.train_actions} train / {m.split.test_actions} test actions ({m.split.test_failures} test failures). Threshold {m.decision_threshold}.</p>
+      <p className="lead">{m.target}. Threshold {m.decision_threshold}.</p>
+      <h3>Training, test and live data</h3>
+      <p>Split by whole mission, so no mission is in two sets{m.split.revision ? ` (dataset revision ${m.split.revision})` : ''}: {m.split.method}.</p>
+      <div className="table-scroll">
+        <table>
+          <thead><tr><th scope="col">Set</th><th scope="col" className="num">Actions</th><th scope="col">Missions</th><th scope="col">Used for</th></tr></thead>
+          <tbody>
+            <tr><th scope="row">Train</th><td className="num">{m.split.train_actions}</td><td>{m.split.train_missions.join(', ')}</td><td>Fitting, model choice (cross-validation), threshold</td></tr>
+            <tr><th scope="row">Test</th><td className="num">{m.split.test_actions}</td><td>{m.split.test_missions.join(', ')}</td><td>Scored once ({m.split.test_failures} failures); the numbers below</td></tr>
+            {m.split.live_missions && <tr><th scope="row">Live</th><td className="num">{m.split.live_actions}</td><td>{m.split.live_missions.join(', ')}</td><td>Never used in training: scored as they stream in (below)</td></tr>}
+          </tbody>
+        </table>
+      </div>
+      {links && (links.dataset || links.model) && (
+        <p className="muted">On Hugging Face: {links.dataset && <a href={`https://huggingface.co/datasets/${links.dataset}`} target="_blank" rel="noreferrer">dataset {links.dataset}</a>}
+          {links.dataset && links.model && ' · '}{links.model && <a href={`https://huggingface.co/${links.model}`} target="_blank" rel="noreferrer">model {links.model}</a>}</p>
+      )}
       <div className="stat-grid">
         <Stat label="Precision" value={num(t.precision, 3)} />
         <Stat label="Recall" value={num(t.recall, 3)} />
@@ -221,11 +279,75 @@ function ModelMetrics({ m }) {
         </table>
       </div>
       <p className="muted">Accuracy is shown for completeness only: always predicting “success” scores {num(m.baselines?.always_predict_success?.accuracy, 2)} with zero recall.</p>
+      {m.test_by_configuration && (
+        <>
+          <h3>Test set by configuration</h3>
+          <div className="table-scroll">
+            <table>
+              <thead><tr><th scope="col">Configuration</th><th scope="col" className="num">Actions</th><th scope="col" className="num">Failures</th><th scope="col" className="num">Precision</th><th scope="col" className="num">Recall</th><th scope="col" className="num">F1</th></tr></thead>
+              <tbody>
+                {Object.entries(m.test_by_configuration).map(([cfg, r]) => (
+                  <tr key={cfg}><th scope="row">{cfg}</th><td className="num">{r.actions}</td><td className="num">{r.failures}</td><td className="num">{num(r.precision, 3)}</td><td className="num">{num(r.recall, 3)}</td><td className="num">{num(r.f1, 3)}</td></tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="muted">Few failures per configuration, so these are very noisy; read them next to the live results below.</p>
+        </>
+      )}
+      {m.what_if_v2_as_v1 && (
+        <p>What-if: the {m.what_if_v2_as_v1.v2_actions} V2 steps scored as if they had run on V1 (same battery, waypoint and action) average
+          {' '}{num(100 * m.what_if_v2_as_v1.mean_risk_if_v1, 0)}% predicted risk, against {num(100 * m.what_if_v2_as_v1.mean_risk_as_v2, 0)}% as V2.
+          {m.what_if_v2_as_v1.mean_risk_if_v1 <= m.what_if_v2_as_v1.mean_risk_as_v2
+            ? ' The configuration label on its own does not lower the model’s risk estimate; the conditions V2 ran in do.'
+            : ' The configuration itself lowers the model’s risk estimate.'}</p>
+      )}
       {m.feature_importance && (
         <>
           <h3>Permutation feature importance</h3>
           <table>
             <tbody>{m.feature_importance.map(f => <tr key={f.feature}><th scope="row">{f.feature}</th><td className="num">{num(f.importance, 4)}</td></tr>)}</tbody>
+          </table>
+        </>
+      )}
+    </>
+  );
+}
+
+/** The model on the live missions it never trained on, filling in as they stream in. */
+function LiveModel({ l }) {
+  if (!l.available) return <p className="note">{l.summary}</p>;
+  const row = (name, c) => c && (
+    <tr key={name}><th scope="row">{name}</th><td className="num">{c.caught}</td><td className="num">{c.missed}</td><td className="num">{c.false_alarms}</td>
+      <td className="num">{num(c.precision, 3)}</td><td className="num">{num(c.recall, 3)}</td></tr>
+  );
+  return (
+    <>
+      <p className="lead">{l.summary}</p>
+      {l.drift && <p className="note note-error" role="status">{l.drift}</p>}
+      {l.arrived.length > 0 && (
+        <>
+          <div className="stat-grid">
+            <Stat label="Missions arrived" value={`${l.arrived.length} of ${l.live_missions.length}`} />
+            <Stat label="Failures caught" value={`${l.model.caught} of ${l.failures}`} tone={l.model.caught ? 'ok' : 'bad'} />
+            <Stat label="False alarms" value={l.model.false_alarms} />
+            {l.ranking && <Stat label="PR-AUC" value={num(l.ranking.pr_auc, 3)} sub={`failure rate ${num(100 * l.ranking.base_rate, 1)}% = chance`} />}
+          </div>
+          <div className="table-scroll">
+            <table>
+              <thead><tr><th scope="col">Approach</th><th scope="col" className="num">Caught</th><th scope="col" className="num">Missed</th><th scope="col" className="num">False alarms</th><th scope="col" className="num">Precision</th><th scope="col" className="num">Recall</th></tr></thead>
+              <tbody>
+                {row(`Model (flag at ${num(100 * l.threshold, 0)}% risk)`, l.model)}
+                {row(`Rule: ${l.battery_rule_text}`, l.battery_rule)}
+              </tbody>
+            </table>
+          </div>
+          <h3>By mission</h3>
+          <table>
+            <thead><tr><th scope="col">Mission</th><th scope="col" className="num">Steps</th><th scope="col" className="num">Failures</th><th scope="col" className="num">Caught</th><th scope="col" className="num">False alarms</th></tr></thead>
+            <tbody>
+              {l.per_mission.map(r => <tr key={r.mission_id}><th scope="row">{r.mission_id}</th><td className="num">{r.actions}</td><td className="num">{r.failures}</td><td className="num">{r.caught}</td><td className="num">{r.false_alarms}</td></tr>)}
+            </tbody>
           </table>
         </>
       )}
@@ -241,6 +363,7 @@ export default function DataScientist() {
   const records = useApi('/records?limit=5000');
   const compare = useApi('/compare');
   const metrics = useApi('/metrics');
+  const modelLive = useApi('/model/live');
   const waypoints = useApi('/waypoints');
   const summary = useApi('/summary');
   const insights = useApi('/insights');
@@ -285,7 +408,11 @@ export default function DataScientist() {
       </Section>
 
       <Section eyebrow="Failure-risk model" title="Model performance" id="ds-model">
-        <Async state={metrics}>{m => <ModelMetrics m={m} />}</Async>
+        <Async state={metrics}>{m => <ModelMetrics m={m} links={modelLive.data && { dataset: modelLive.data.dataset_repo, model: modelLive.data.model_repo }} />}</Async>
+      </Section>
+
+      <Section eyebrow="Failure-risk model" title="On missions it has never seen (live)" id="ds-live-model">
+        <Async state={modelLive}>{l => <LiveModel l={l} />}</Async>
       </Section>
 
       <Section

@@ -11,7 +11,8 @@ export function num(value, digits = 2) {
   if (value === null || value === undefined || value === '') return '—';
   const n = Number(value);
   if (Number.isNaN(n)) return String(value);
-  return Number.isInteger(n) ? String(n) : n.toFixed(digits).replace(/\.?0+$/, '');
+  // Trim trailing zeros after the decimal point only, so num(59.53, 0) stays "60".
+  return Number.isInteger(n) ? String(n) : n.toFixed(digits).replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '');
 }
 
 const UNITS = { C: '°C', pct: '%', psi: ' psi', dB: ' dB', db: ' dB', score: '/100' };

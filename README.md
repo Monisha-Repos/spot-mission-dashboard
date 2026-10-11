@@ -62,7 +62,8 @@ A dashboard that translates every SPOT mission into plain operator language, **l
 
 ### 🚨 Live Data + Alarms
 - A small Java API ([ingest-api/](ingest-api/)) is the only way new missions enter the lakehouse. It validates each one and pushes it to every open dashboard instantly.
-- The demo starts with only BASELINE (V1) missions. The IMPROVED (V2) missions then stream in live, so you can watch performance change.
+- The demo starts with only BASELINE (V1) missions. The IMPROVED (V2) missions then stream in live, event by event, so you can watch Spot walk its route, see each reading and the AI's failure-risk estimate before every step, and watch performance change.
+- The presenter drives the shared feed from the Operator tab (start, pause, speed, reset). Anyone else can click **Try live demo** for a private replay in their own browser that saves nothing.
 - A serious anomaly sets off a siren and a full-screen alarm showing the asset, its location and a picture. It stays up until an operator marks it **not a problem** or **danger**.
 
 ### 🧑‍🏭 Designed for Operators, Not Engineers
@@ -113,8 +114,8 @@ Every SPOT reading becomes an **Inspection Record**:
 | Live ingestion | Java 17 ingest API (JDK only), Server-Sent Events for live alarms |
 | Backend API | Python, FastAPI ([backend/](backend/)) |
 | Operator Console storage | SQLite with an append-only audit trail |
-| ML model | scikit-learn random forest ([ml/](ml/)), published on the Hugging Face Hub |
-| AI assistant | TF-IDF retrieval + Claude (Anthropic API) or Hugging Face Inference |
+| ML model | scikit-learn failure-risk model ([ml/](ml/)) with fixed train / test / live splits by mission, published with its dataset on the Hugging Face Hub |
+| AI assistant | TF-IDF retrieval + Claude (Anthropic API) or Hugging Face Inference Providers (Qwen3-235B, with a spend cap) |
 | Frontend | _TBD_ (planned: React + Vite + React Three Fiber) |
 
 ## Getting Started

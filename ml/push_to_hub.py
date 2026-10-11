@@ -16,7 +16,7 @@ from pathlib import Path
 
 ML = Path(__file__).resolve().parent
 REPO_NAME = "spot-action-failure-risk"
-FILES = ["model.joblib", "metrics.json", "train.py"]
+FILES = ["model.joblib", "metrics.json", "train.py", "splits.json", "build_dataset.py"]
 
 
 def model_card(m: dict, repo_id: str) -> str:
@@ -25,6 +25,11 @@ def model_card(m: dict, repo_id: str) -> str:
     cm = t["confusion_matrix"]
     importance = "\n".join(f"| `{f['feature']}` | {f['importance']:+.4f} |" for f in m["feature_importance"])
     risk = m["mean_predicted_risk_by_configuration"]
+    split = m["split"]
+    owner = repo_id.split("/")[0]
+    by_config = "\n".join(f"| {cfg} | {r['actions']} | {r['failures']} | {r['precision']} | {r['recall']} | {r['f1']} |"
+                           for cfg, r in m.get("test_by_configuration", {}).items())
+    what_if = m.get("what_if_v2_as_v1") or {}
     return f"""---
 library_name: sklearn
 pipeline_tag: tabular-classification
@@ -57,10 +62,14 @@ Built for the Knight Hacks 2026 SPOT Operational Intelligence Challenge, as part
 
 ## How it was evaluated
 
-- {m['split']['method']}: {m['split']['train_actions']} training actions, {m['split']['test_actions']} test actions
-  ({m['split']['test_failures']} failures) from {len(m['split']['test_missions'])} held-out missions. No mission is in both sets.
+- Fixed split by mission, published as [{owner}/spot-mission-actions](https://huggingface.co/datasets/{owner}/spot-mission-actions)
+  (revision `{split.get('revision')}`): {split['method']}.
+- {split['train_actions']} training actions, {split['test_actions']} test actions ({split['test_failures']} failures) from
+  {len(split['test_missions'])} test missions, and {split.get('live_actions', 0)} live actions from {len(split.get('live_missions', []))}
+  missions ({', '.join(split.get('live_missions', []))}) that were never used. No mission is in two sets.
 - Model choice, threshold and the baseline rule were fit on training data only (5-fold grouped cross-validation).
-- The shipped model is refit on all missions with the same settings; the numbers below are from the held-out split.
+- The shipped model is refit on train + test with the same settings. The live missions stay unseen: the dashboard
+  scores the model on them as they stream in during the demo.
 
 | Held-out test | This model | Battery rule ({b['rule']}) |
 |---|---|---|
@@ -71,6 +80,12 @@ Built for the Knight Hacks 2026 SPOT Operational Intelligence Challenge, as part
 | ROC-AUC | {t.get('roc_auc')} | {b.get('roc_auc')} |
 
 Cross-validation on the training missions: PR-AUC {cv['pr_auc_mean']} ± {cv['pr_auc_std']}, F1 {cv['f1_mean']} ± {cv['f1_std']}.
+
+By configuration (test set; V2 has few failures, so its numbers are very noisy):
+
+| Configuration | Actions | Failures | Precision | Recall | F1 |
+|---|---|---|---|---|---|
+{by_config}
 
 Confusion matrix (test): {cm['true_positive']} failures caught, {cm['false_negative']} missed, {cm['false_positive']} false alarms,
 {cm['true_negative']} correct "will succeed".
@@ -85,14 +100,18 @@ because only {m['data']['failure_rate']:.0%} of actions fail.
 {importance}
 
 Battery level is by far the strongest signal. Average predicted risk is **{risk.get('V1', 0):.0%} for V1** actions and
-**{risk.get('V2', 0):.0%} for V2**, matching the improvement seen in the data.
+**{risk.get('V2', 0):.0%} for V2**.
+
+What-if: the {what_if.get('v2_actions', 0)} V2 actions scored as if they had run on V1 (same battery, waypoint and action)
+average {what_if.get('mean_risk_if_v1', 0):.0%} risk, against {what_if.get('mean_risk_as_v2', 0):.0%} as V2. The configuration label on its own
+does not lower predicted risk; most of the V1 to V2 difference comes with the conditions V2 ran in, chiefly battery level.
 
 Inference: {m['inference_latency_ms']['single_action']} ms for one action, {m['inference_latency_ms']['per_action_in_a_batch']} ms per action in a batch (laptop CPU).
 
 ## Limitations
 
 - Very small, synthetic dataset; the test set has only {m['split']['test_failures']} failures, so the test numbers are noisy.
-  The model only modestly beats a one-line battery rule.
+  Compare it with the battery-rule baseline above rather than reading the numbers as absolute.
 - Waypoints, assets and configurations outside the training data are encoded as "unknown".
 - Not a safety system: use it to prioritize what to look at, not to skip inspections.
 

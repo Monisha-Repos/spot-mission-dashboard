@@ -1,0 +1,38 @@
+{
+  "method": "by mission; live = the last 4 IMPROVED missions by start time (never trained on, streamed in the demo); test = 1 of 5 StratifiedGroupKFold folds of the rest (stratified on scenario x outcome, seed 42); train = the remaining missions",
+  "seed": 42,
+  "revision": "splits-v1",
+  "train": [
+    "M001",
+    "M002",
+    "M003",
+    "M006",
+    "M007",
+    "M008",
+    "M010",
+    "M011",
+    "M012",
+    "M013",
+    "M014",
+    "M015",
+    "M016",
+    "M018",
+    "M019",
+    "M020",
+    "M022",
+    "M023"
+  ],
+  "test": [
+    "M004",
+    "M005",
+    "M009",
+    "M017",
+    "M021"
+  ],
+  "live": [
+    "M024",
+    "M025",
+    "M026",
+    "M027"
+  ]
+}

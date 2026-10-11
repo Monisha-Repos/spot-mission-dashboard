@@ -4,20 +4,30 @@ that must answer from those records only and cite their IDs.
 
 Providers: anthropic (default when a key is set), huggingface, or none. With none, or if the LLM call
 fails, the answer lists the matching records instead, so the endpoint always works.
+
+Paid inference is guarded for a public demo: identical questions are answered from a cache, each visitor gets a
+few LLM questions per minute and hour, and once the estimated spend this month reaches ASK_BUDGET_USD the
+assistant falls back to listing the matching records.
 """
 from __future__ import annotations
 
+import json
 import logging
 import re
 import threading
+import time
+from collections import OrderedDict, defaultdict, deque
+from datetime import datetime, timezone
 from pathlib import Path
+
+import httpx
 
 import anthropic
 from pypdf import PdfReader
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import linear_kernel
 
-from . import analytics, domain
+from . import analytics, domain, evaluation
 from .config import Settings
 from .records import Dataset
 
@@ -41,6 +51,9 @@ blocked path signal wifi network communication radio battery charge charging pow
 improved improvement improving degrade degrading performance kpi kpis metric metrics trend trends reading readings measurement
 measurements quality questionable critical severity severe operator dashboard data dataset field fields table replay
 """.split())
+CACHE_SIZE = 256
+# USD per million tokens when the router's price list can't be read: deliberately pessimistic.
+UNKNOWN_PRICE = (3.0, 3.0)
 ID_PATTERN = re.compile(r"\b(M\d{3}|AN\d{3}|A\d{4}|R\d{4}|WP\d{2}|[A-Z]{2,5}-\d{3})\b", re.I)
 
 SYSTEM_PROMPTS = {
@@ -77,6 +90,10 @@ class Assistant:
         self._matrix = None
         self._client = None
         self._vocab: set[str] = set()
+        self._cache: OrderedDict[tuple, dict] = OrderedDict()
+        self._recent: dict[str, deque] = defaultdict(deque)
+        self._spend_lock = threading.Lock()
+        self._prices: dict[str, dict[str, tuple[float, float]]] | None = None
 
     # ---------- documents ----------
 
@@ -171,6 +188,14 @@ class Assistant:
         docs.append({"id": "compare-V1-V2", "kind": "comparison", "title": "V1 (BASELINE) vs V2 (IMPROVED)",
                      "text": cmp["summary"] + f" Tests: {cmp['tests']}. Changes: "
                              + "; ".join(f"{c['kpi']} {c['a']} -> {c['b']} ({c['verdict']})" for c in cmp["changes"][:25])})
+        detail = evaluation.improvement(ds)
+        if detail.get("available"):
+            docs.append({"id": "evidence-V1-V2", "kind": "comparison", "title": "How sure we are that V2 is better",
+                         "text": detail["summary"] + f" Method: {detail['method']}"})
+        if model_metrics and (threshold := model_metrics.get("decision_threshold")) is not None:
+            live_model = evaluation.live_model(ds, model_metrics, threshold)
+            docs.append({"id": "model-live", "kind": "ML model", "title": "Failure-risk model on never-seen (live) missions",
+                         "text": live_model["summary"] + (" " + live_model["drift"] if live_model.get("drift") else "")})
         for i in analytics.insights(ds, model_metrics):
             docs.append({"id": f"insight-{i['id']}", "kind": "insight", "title": i["title"], "text": f"{i['title']}. {i['detail']}"})
         if model_metrics:
@@ -228,7 +253,7 @@ class Assistant:
     # ---------- answering ----------
 
     def ask(self, ds: Dataset, model_metrics: dict | None, question: str, mode: str = "simple",
-            context: dict | None = None) -> dict:
+            context: dict | None = None, client: str = "anonymous") -> dict:
         mode = mode if mode in SYSTEM_PROMPTS else "simple"
         self._ensure_index(ds, model_metrics)
         docs, best = self.retrieve(question, context)
@@ -239,12 +264,26 @@ class Assistant:
             return {"answer": NO_DATA, "mode": mode, "provider": "guardrail", "citations": [], "sources": []}
 
         provider, error = self.settings.ask_provider, None
-        if provider in {"anthropic", "huggingface"}:
+        uses_llm = provider in {"anthropic", "huggingface"}
+        key = (provider, mode, " ".join(question.lower().split()), tuple(sorted((context or {}).items())), self._index_for)
+        if uses_llm and (hit := self._cache.get(key)):
+            self._cache.move_to_end(key)
+            return {**hit, "cached": True}
+        if uses_llm:
+            error = self._over_limit(client)
+        if uses_llm and not error:
             prompt = self._prompt(question, docs, context)
             try:
-                answer = self._call_anthropic(mode, prompt) if provider == "anthropic" else self._call_huggingface(mode, prompt)
-                return {"answer": answer, "mode": mode, "provider": provider,
-                        "citations": self._citations(answer, docs), "sources": sources}
+                if provider == "anthropic":
+                    answer, model = self._call_anthropic(mode, prompt), self.settings.anthropic_model
+                else:
+                    answer, model = self._call_huggingface(mode, prompt)
+                result = {"answer": answer, "mode": mode, "provider": provider, "model": model,
+                          "citations": self._citations(answer, docs), "sources": sources}
+                self._cache[key] = result
+                while len(self._cache) > CACHE_SIZE:
+                    self._cache.popitem(last=False)
+                return result
             except LLMError as e:
                 log.warning("LLM call failed (%s): %s", provider, e)
                 error = str(e)
@@ -312,16 +351,90 @@ class Assistant:
         text = "".join(block.text for block in response.content if block.type == "text").strip()
         return text or NO_DATA
 
-    def _call_huggingface(self, mode: str, prompt: str) -> str:
+    def _call_huggingface(self, mode: str, prompt: str) -> tuple[str, str]:
+        """Main model on the configured provider, then the small fallback model wherever the router finds it."""
         from huggingface_hub import InferenceClient
+        attempts = [(self.settings.hf_chat_model, self.settings.hf_provider or "auto")]
+        if self.settings.hf_fallback_model and self.settings.hf_fallback_model != self.settings.hf_chat_model:
+            attempts.append((self.settings.hf_fallback_model, "auto"))
+        errors = []
+        for model, provider in attempts:
+            try:
+                client = InferenceClient(provider=provider, token=self.settings.hf_token or None, timeout=45)
+                response = client.chat_completion(
+                    messages=[{"role": "system", "content": SYSTEM_PROMPTS[mode]}, {"role": "user", "content": prompt}],
+                    model=model, max_tokens=600, temperature=0.2)
+            except Exception as e:  # huggingface_hub raises several unrelated error types
+                errors.append(f"{model}: {e}")
+                log.warning("Hugging Face call to %s (%s) failed: %s", model, provider, e)
+                continue
+            usage = getattr(response, "usage", None)
+            self._record_spend(model, provider, getattr(usage, "prompt_tokens", None) or len(prompt) // 3,
+                               getattr(usage, "completion_tokens", None) or 600)
+            return (response.choices[0].message.content or "").strip() or NO_DATA, model
+        raise LLMError("Hugging Face inference failed: " + " | ".join(errors))
+
+    # ---------- spend + rate guards ----------
+
+    def _over_limit(self, client: str) -> str | None:
+        """Why this question can't use the LLM right now, or None. Counts the question when it can."""
+        spent = self.usage()["spent_usd"]
+        if spent >= self.settings.ask_budget_usd:
+            return f"the AI budget for this month is used up (${spent:.2f} of ${self.settings.ask_budget_usd:.2f})"
+        now, recent = time.monotonic(), self._recent[client]
+        while recent and now - recent[0] > 3600:
+            recent.popleft()
+        if sum(now - t < 60 for t in recent) >= self.settings.ask_per_minute or len(recent) >= self.settings.ask_per_hour:
+            return "too many AI questions from this browser for now; showing the matching records instead"
+        recent.append(now)
+        return None
+
+    def _price(self, model: str, provider: str) -> tuple[float, float]:
+        """USD per million input / output tokens from the router's public price list; the dearest provider for auto."""
+        if self._prices is None:
+            try:
+                data = httpx.get("https://router.huggingface.co/v1/models", timeout=10).json()["data"]
+                self._prices = {m["id"]: {p["provider"]: (p["pricing"]["input"], p["pricing"]["output"])
+                                          for p in m.get("providers", []) if p.get("pricing")} for m in data}
+            except Exception as e:
+                log.warning("could not read Hugging Face prices (%s); estimating spend pessimistically", e)
+                self._prices = {}
+        options = self._prices.get(model, {})
+        if provider in options:
+            return options[provider]
+        return max(options.values(), key=sum) if options else UNKNOWN_PRICE
+
+    def _record_spend(self, model: str, provider: str, tokens_in: int, tokens_out: int):
+        price_in, price_out = self._price(model, provider)
+        cost = (tokens_in * price_in + tokens_out * price_out) / 1e6
+        with self._spend_lock:
+            usage = self._load_spend()
+            usage["spent_usd"] = round(usage["spent_usd"] + cost, 6)
+            usage["calls"] += 1
+            usage["tokens_in"] += tokens_in
+            usage["tokens_out"] += tokens_out
+            path = self.settings.ask_spend_file
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(usage, indent=2))
+        log.info("LLM %s via %s: %d in / %d out tokens, about $%.5f (month so far: $%.4f)",
+                 model, provider, tokens_in, tokens_out, cost, usage["spent_usd"])
+
+    def _load_spend(self) -> dict:
+        month = datetime.now(timezone.utc).strftime("%Y-%m")
         try:
-            client = InferenceClient(token=self.settings.hf_token or None, timeout=60)
-            response = client.chat_completion(
-                messages=[{"role": "system", "content": SYSTEM_PROMPTS[mode]}, {"role": "user", "content": prompt}],
-                model=self.settings.hf_chat_model, max_tokens=700)
-        except Exception as e:  # huggingface_hub raises several unrelated error types
-            raise LLMError(f"Hugging Face inference failed: {e}") from e
-        return (response.choices[0].message.content or "").strip() or NO_DATA
+            usage = json.loads(self.settings.ask_spend_file.read_text())
+            if usage.get("month") == month:
+                return usage
+        except (OSError, ValueError):
+            pass
+        return {"month": month, "spent_usd": 0.0, "calls": 0, "tokens_in": 0, "tokens_out": 0}
+
+    def usage(self) -> dict:
+        """Estimated AI spend this month, for /health and the presenter."""
+        with self._spend_lock:
+            usage = self._load_spend()
+        model = {"huggingface": self.settings.hf_chat_model, "anthropic": self.settings.anthropic_model}.get(self.settings.ask_provider)
+        return {**usage, "budget_usd": self.settings.ask_budget_usd, "provider": self.settings.ask_provider, "model": model}
 
 
 class LLMError(RuntimeError):

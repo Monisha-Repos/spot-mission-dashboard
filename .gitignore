@@ -229,5 +229,6 @@ data/lakehouse/
 
 # Operator Console database (issues, audit trail, snapshots)
 data/ops.db
+data/ask_spend.json
 data/ops.db-wal
 data/ops.db-shm
