@@ -5,3 +5,4 @@ dist/
 # The repository's Python template ignores lib/; these are frontend sources.
 !src/lib/
 !src/lib/**
+.vercel
