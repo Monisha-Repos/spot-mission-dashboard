@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { asset as assetUrl, useApi } from '../api.js';
-import { Async, Badge, Section, Segmented, Stat } from '../components/ui.jsx';
-import { humanize, reading, tone } from '../lib/format.js';
+import { Async, Badge, Battery, Section, Segmented, Stat } from '../components/ui.jsx';
+import { batteryLevel, humanize, reading, tone } from '../lib/format.js';
 import {
   RESULT, buildTimeline, clockAt, dayLabel, didWhat, doingWhat, elapsed, nextFindingAfter, nextWhat, stateAt,
 } from '../lib/replay.js';
@@ -145,8 +145,6 @@ function ReplayMap({ waypoints, tl, now, at }) {
 
 /* ---------- what Spot is doing right now ---------- */
 
-function batteryTone(pct) { return pct === null ? 'muted' : pct < 20 ? 'bad' : pct < 35 ? 'warn' : 'ok'; }
-
 function NowCard({ tl, now, at, mission, onRestart }) {
   const n = tl.stops.length;
   const s = now.current;
@@ -199,10 +197,10 @@ function NowCard({ tl, now, at, mission, onRestart }) {
       ) : <p className="muted">No stops recorded for this run.</p>}
 
       <div className="now-meters">
-        <div className={`meter sev-${batteryTone(now.battery)}`}>
+        <div className={`meter batt-${batteryLevel(now.battery)}`}>
           <span className="meter-label">Battery</span>
           <span className="meter-track"><span style={{ width: `${now.battery ?? 0}%` }} /></span>
-          <span className="meter-value">{now.battery ?? '—'}%</span>
+          <span className="meter-value"><Battery pct={now.battery} /></span>
         </div>
         <div className="now-count">
           <span><b>{now.revealed}</b> / {n} stops checked</span>

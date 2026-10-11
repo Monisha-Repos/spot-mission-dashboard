@@ -46,6 +46,13 @@ export function kpiLabel(key) {
   return tail ? `${base} · ${tail.includes('_') ? humanize(tail) : tail}` : base;
 }
 
+/** Battery % → level: red up to 30%, yellow up to 60%, green above. 'none' when unknown. */
+export function batteryLevel(value) {
+  if (value === null || value === undefined || value === '' || Number.isNaN(Number(value))) return 'none';
+  const n = Number(value);
+  return n <= 30 ? 'low' : n <= 60 ? 'mid' : 'high';
+}
+
 /** Status of a waypoint / record → CSS tone. */
 export const tone = status => ({ normal: 'ok', watch: 'warn', action: 'bad' }[status] || 'muted');
 export const severityTone = s => ({ LOW: 'muted', MEDIUM: 'warn', HIGH: 'bad', CRITICAL: 'bad' }[s] || 'muted');
