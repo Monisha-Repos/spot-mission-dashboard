@@ -124,7 +124,7 @@ export default function AskPanel({ mode, context }) {
             {busy && <div className="msg msg-ai"><p className="typing">Thinking…</p></div>}
           </div>
           {unseen && (
-            <button type="button" className="btn btn-accent btn-sm ask-new" onClick={() => { log.current?.scrollTo({ top: log.current.scrollHeight }); setUnseen(false); }}>
+            <button type="button" className="btn btn-ghost btn-sm ask-new" onClick={() => { log.current?.scrollTo({ top: log.current.scrollHeight }); setUnseen(false); }}>
               New response ↓
             </button>
           )}

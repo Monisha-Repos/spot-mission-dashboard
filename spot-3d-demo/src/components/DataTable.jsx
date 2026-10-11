@@ -16,6 +16,7 @@ export default function DataTable({ rows, columns, filters = [], caption, rowKey
   const [picked, setPicked] = useState({});
   const [page, setPage] = useState(0);
   const [scrolled, setScrolled] = useState(false);
+  const [more, setMore] = useState({ left: false, right: false });
   const getter = c => c.get || (r => r[c.key]);
   const text = (c, r) => {
     const v = getter(c)(r);
@@ -45,6 +46,19 @@ export default function DataTable({ rows, columns, filters = [], caption, rowKey
   // A new page, sort or filter starts at the top of the scroll box.
   const box = useRef(null);
   useEffect(() => { if (box.current) box.current.scrollTop = 0; }, [current, sort, query, picked]);
+  // Which sides have columns scrolled out of view, for the edge cue.
+  const measure = () => {
+    const el = box.current;
+    if (!el) return;
+    const left = el.scrollLeft > 2, right = el.scrollLeft + el.clientWidth < el.scrollWidth - 2;
+    setMore(m => (m.left === left && m.right === right ? m : { left, right }));
+  };
+  useEffect(() => {
+    measure();
+    const ro = new ResizeObserver(measure);
+    if (box.current) ro.observe(box.current);
+    return () => ro.disconnect();
+  }, [shown.length, columns.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="table-wrap">
@@ -66,13 +80,14 @@ export default function DataTable({ rows, columns, filters = [], caption, rowKey
           <button type="button" className="btn btn-ghost btn-sm" onClick={clear}>Clear filters ({activeFilters})</button>
         )}
         <span className="muted table-count">
+          {more.right && <span className="more-cols">More columns → · </span>}
           {visible.length} of {rows.length}{activeFilters > 0 && <span className="filtered-tag"> · filtered</span>}
         </span>
       </div>
       <div
         ref={box}
-        className={`table-scroll table-scroll-y${scrolled ? ' is-scrolled' : ''}`}
-        onScroll={e => { const s = e.currentTarget.scrollTop > 0; if (s !== scrolled) setScrolled(s); }}
+        className={`table-scroll table-scroll-y${scrolled ? ' is-scrolled' : ''}${more.left ? ' more-left' : ''}${more.right ? ' more-right' : ''}`}
+        onScroll={e => { const s = e.currentTarget.scrollTop > 0; if (s !== scrolled) setScrolled(s); measure(); }}
       >
         <table className="data-table">
           <caption className="sr-only">{caption}</caption>

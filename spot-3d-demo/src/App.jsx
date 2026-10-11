@@ -157,7 +157,7 @@ export default function App() {
               {refreshed && <span className="refreshed" title="Last time data loaded from the backend">Data updated {clock(refreshed)}</span>}
             </span>
             <button type="button" className={`btn btn-sm ${siren ? 'btn-ghost' : 'btn-accent'}`} onClick={arm} aria-pressed={siren ? muted : undefined}>
-              {!siren ? 'Arm alarms 🔊' : muted ? 'Unmute' : 'Mute'}
+              {!siren ? 'Arm alarms' : muted ? 'Unmute' : 'Mute'}
             </button>
             <button
               type="button"

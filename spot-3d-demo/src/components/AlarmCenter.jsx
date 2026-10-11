@@ -167,8 +167,8 @@ export default function AlarmCenter({ siren, muted, onMute, onActive, onStream }
               <input value={note} onChange={e => setNote(e.target.value)} maxLength={1000} placeholder={`Decision by ${session.name}`} />
             </label>
             <div className="alarm-buttons">
-              <button type="button" className="btn btn-ghost" disabled={busy || !note.trim()} onClick={() => decide('OVERRIDE')}>✅ Not a problem (override)</button>
-              <button type="button" className="btn btn-danger" disabled={busy} onClick={() => decide('DANGER')}>🚨 Mark as danger</button>
+              <button type="button" className="btn btn-ghost" disabled={busy || !note.trim()} onClick={() => decide('OVERRIDE')}>Not a problem (override)</button>
+              <button type="button" className="btn btn-danger" disabled={busy} onClick={() => decide('DANGER')}>Mark as danger</button>
             </div>
           </div>
         ) : (

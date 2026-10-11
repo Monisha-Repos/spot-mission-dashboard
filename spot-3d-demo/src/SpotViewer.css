@@ -11,24 +11,24 @@
   display: block; padding: 0; border: 0; background: none;
   color: var(--text, #fff); cursor: pointer; font: inherit;
 }
-.hotspot { --signal: #1ec8ff; --signal-halo: rgba(30, 200, 255, .35); }
+/* Cyan Pulse hexagons (the design guide's geometry for UI marks): no glow, no rounded dots. */
+.hotspot { --signal: var(--info, #29abe2); --hex: polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%); }
 .hotspot-dot {
-  position: relative; display: block; width: 12px; height: 12px; border-radius: 50%;
-  background: var(--signal);
-  box-shadow: 0 0 6px var(--signal-halo);
+  position: relative; display: block; width: 14px; height: 14px;
+  background: var(--signal); clip-path: var(--hex); transition: background-color .15s;
 }
-/* One soft halo breathing out from the dot. */
-.hotspot-dot::after {
-  content: ''; position: absolute; inset: 0; border-radius: 50%; pointer-events: none;
-  background: var(--signal-halo);
-  animation: hotspot-halo 3s ease-out infinite;
+/* A flat hexagon ring that steps out from the marker and fades, so the spots read as clickable. */
+.hotspot::after {
+  content: ''; position: absolute; left: 0; top: 0; width: 14px; height: 14px; pointer-events: none;
+  background: var(--signal); clip-path: var(--hex); opacity: 0;
+  animation: hotspot-pulse 3s ease-out infinite;
 }
-@keyframes hotspot-halo {
-  from { transform: scale(1); opacity: .8; }
-  to { transform: scale(2.6); opacity: 0; }
+@keyframes hotspot-pulse {
+  from { transform: scale(1); opacity: .45; }
+  to { transform: scale(2.4); opacity: 0; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .hotspot-dot::after { animation: none; opacity: 0; }
+  .hotspot::after { animation: none; }
 }
 .hotspot-label {
   /* Out of the flow so the button is exactly the dot, which the viewer centres on the anchor. */
@@ -39,10 +39,8 @@
 }
 /* .is-hover: the matching part button outside the canvas is hovered or focused. */
 .hotspot:hover .hotspot-label, .hotspot:focus-visible .hotspot-label, .hotspot.is-active .hotspot-label, .hotspot.is-hover .hotspot-label { opacity: 1; }
-/* Hovered or selected: the halo stops and a steady ring takes its place. */
-.hotspot:hover .hotspot-dot::after, .hotspot.is-active .hotspot-dot::after, .hotspot.is-hover .hotspot-dot::after { animation: none; opacity: 0; }
-.hotspot:hover .hotspot-dot, .hotspot.is-active .hotspot-dot, .hotspot:focus-visible .hotspot-dot, .hotspot.is-hover .hotspot-dot {
-  outline: 2px solid var(--signal); outline-offset: 3px;
-}
-.hotspot.is-active .hotspot-dot { width: 14px; height: 14px; }
-.hotspot:focus-visible { outline: none; }
+/* Hovered, linked or selected: the pulse stops and the marker turns white (a colour change, not a lift or glow). */
+.hotspot:hover::after, .hotspot.is-active::after, .hotspot.is-hover::after { animation: none; }
+.hotspot:hover .hotspot-dot, .hotspot.is-active .hotspot-dot, .hotspot:focus-visible .hotspot-dot, .hotspot.is-hover .hotspot-dot { background: var(--text, #fff); }
+.hotspot.is-active .hotspot-dot { width: 18px; height: 18px; margin: -2px; }
+.hotspot:focus-visible { outline: 2px solid var(--signal); outline-offset: 4px; }
