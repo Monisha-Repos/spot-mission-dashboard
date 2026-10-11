@@ -15,6 +15,7 @@ const clock = iso => (iso ? new Date(iso).toLocaleTimeString([], { hour: '2-digi
 /** Top-bar pill: the live mission while one runs, otherwise whether the live stream is connected. */
 export function LiveBadge() {
   const { stream, active, mode, run, status } = useLive();
+  const { go } = useApp();
   if (active) {
     const hold = status.state !== 'running' && status.state !== 'saving';
     return (
@@ -26,10 +27,16 @@ export function LiveBadge() {
       </span>
     );
   }
+  // Nothing is streaming: say so, and offer the sandbox (which works even when the live feed is offline).
+  if (stream === 'connecting') {
+    return <span className="live" title="Connecting to the live feed"><i aria-hidden="true" /><span className="live-text">Connecting…</span></span>;
+  }
+  const idle = stream === 'offline' ? 'Live feed offline' : mode === 'sandbox' ? 'Sandbox finished' : 'No live run';
   return (
-    <span className={`live live-${stream}`} title={`Live ingest stream: ${stream}`}>
-      <i aria-hidden="true" />{stream === 'live' ? 'Live' : stream === 'offline' ? 'Offline' : '…'}
-    </span>
+    <button type="button" className="live live-idle" onClick={() => go?.('overview', { scrollTo: 'live' })}
+      title={`${idle}. Watch Spot work in a private replay: Overview, Try live demo.`}>
+      <i aria-hidden="true" /><span className="live-text">{idle} · <u>Try demo</u></span>
+    </button>
   );
 }
 

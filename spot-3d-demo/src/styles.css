@@ -1165,3 +1165,10 @@ body:has(.stream-bubble, .stream-dialog) .toasts { bottom: 96px; }
 .stat-trend.is-good { color: var(--ok); }
 .stat-trend.is-bad { color: var(--bad); }
 @keyframes trend-in { from { opacity: 0; transform: translateY(4px); } }
+
+/* Top-bar pill when nothing is streaming: muted, and a shortcut to the sandbox. */
+.live-idle { padding: 0; border: 0; background: none; font: inherit; font-size: 11px; cursor: pointer; }
+.live-idle i { background: var(--muted); animation: none; }
+.live-idle u { text-underline-offset: 3px; }
+.live-idle:hover, .live-idle:focus-visible { color: var(--text); }
+.live-idle:hover u { color: var(--signal); }
