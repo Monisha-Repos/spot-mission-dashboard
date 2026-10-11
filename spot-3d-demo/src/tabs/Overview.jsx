@@ -4,7 +4,7 @@ import { Async, Badge, Bars, Empty, Section, Segmented, Stat, ZoomImg } from '..
 import InclinedMap from '../components/InclinedMap.jsx';
 import { useLive } from '../live/LiveContext.jsx';
 import { LivePanel } from '../live/LiveViews.jsx';
-import { formatTime, num, pct, reading, severityTone, titleCase, tone } from '../lib/format.js';
+import { formatTime, num, pct, reading, severityTone, titleCase, tone, unit } from '../lib/format.js';
 import { scrollToEl } from '../lib/dom.js';
 
 const SpotViewer = lazy(() => import('../SpotViewer.jsx'));
@@ -34,6 +34,16 @@ function partTone(p) {
   return 'ok';
 }
 
+// Before any IMPROVED (V2) mission has arrived there is nothing to compare with, so say so instead of "77% → —".
+const V1_ONLY = 'V1 baseline only · V2 not in yet';
+
+/** V1 vs V2 for one measure, or the V1 figure alone while there is no V2 data yet. */
+function VersionStat({ by, label }) {
+  const v1 = by?.V1, v2 = by?.V2;
+  if (v2 === undefined || v2 === null) return <Stat label={`${label} · V1 baseline`} value={pct(v1, 0)} sub="V2 not in yet" />;
+  return <Stat label="V1 → V2" value={`${pct(v1, 0)} → ${pct(v2, 0)}`} />;
+}
+
 function PartPanel({ id, onClose }) {
   const state = useApi(id ? `/parts/${id}` : null);
   // While the next part loads, the previous part's numbers stay dimmed so they aren't mistaken for the new one.
@@ -49,12 +59,12 @@ function PartPanel({ id, onClose }) {
             <p className="lead">{p.summary}</p>
             <div className="stat-row">
               <Stat label="Success" value={pct(p.success_pct)} sub={`${p.actions} actions`} />
-              <Stat label="V1 → V2" value={`${pct(p.success_pct_by_configuration?.V1, 0)} → ${pct(p.success_pct_by_configuration?.V2, 0)}`} />
+              <VersionStat by={p.success_pct_by_configuration} label="Success" />
             </div>
             {Object.entries(p.readings || {}).map(([k, r]) => (
               <div key={k} className="reading-card">
                 <span className="eyebrow">{r.label}</span>
-                <p>Average <strong>{num(r.mean)}{r.unit === 'C' ? '°C' : ` ${r.unit}`}</strong> across {r.count} readings
+                <p>Average <strong>{num(r.mean)}{unit(r.unit)}</strong> across {r.count} readings
                   {r.usual_range && <> · usual range {num(r.usual_range.low)}–{num(r.usual_range.high)}</>}
                   {r.questionable ? <> · {r.questionable} questionable</> : null}.</p>
               </div>
@@ -92,7 +102,7 @@ function WaypointPanel({ id, flash }) {
               <p><Badge tone={tone(w.status)}>{w.status}</Badge> <span className="muted">{w.status_basis}</span></p>
               <div className="stat-row">
                 <Stat label="Failed" value={pct(w.failure_pct)} sub={`of ${w.actions} actions`} />
-                <Stat label="V1 → V2" value={`${pct(w.by_configuration?.V1?.failure_pct, 0)} → ${pct(w.by_configuration?.V2?.failure_pct, 0)}`} />
+                <VersionStat by={{ V1: w.by_configuration?.V1?.failure_pct, V2: w.by_configuration?.V2?.failure_pct }} label="Failed" />
                 <Stat label="Open issues" value={w.open_issues ?? '—'} />
               </div>
               <h4>Latest readings</h4>
@@ -317,7 +327,7 @@ export default function Overview({ theme, context, setContext, onReplay }) {
         <Async state={summary}>
           {() => (
             <div className="stat-grid">
-              <Stat label="Action success" value={pct(k.all.action_success_pct)} sub={`V1 ${pct(k.V1?.action_success_pct)} → V2 ${pct(k.V2?.action_success_pct)}`} tone="accent" trend={trends.success} />
+              <Stat label="Action success" value={pct(k.all.action_success_pct)} sub={k.V2 ? `V1 ${pct(k.V1?.action_success_pct)} → V2 ${pct(k.V2.action_success_pct)}` : V1_ONLY} tone="accent" trend={trends.success} />
               <Stat label="Missions completed" value={pct(k.all.mission_completion_pct)} sub={`${k.all.missions} missions`} trend={trends.completion} />
               <Stat
                 label="Findings"
@@ -327,7 +337,7 @@ export default function Overview({ theme, context, setContext, onReplay }) {
                 onClick={() => scrollToEl('attention')}
                 action="Jump to the top findings"
               />
-              <Stat label="Battery used per mission" value={pct(k.all.avg_battery_drain_pct, 0)} sub={`V1 ${pct(k.V1?.avg_battery_drain_pct, 0)} → V2 ${pct(k.V2?.avg_battery_drain_pct, 0)}`} trend={trends.battery} />
+              <Stat label="Battery used per mission" value={pct(k.all.avg_battery_drain_pct, 0)} sub={k.V2 ? `V1 ${pct(k.V1?.avg_battery_drain_pct, 0)} → V2 ${pct(k.V2.avg_battery_drain_pct, 0)}` : V1_ONLY} trend={trends.battery} />
               {summary.data.ops ? (
                 <Stat
                   label="Open issues"
