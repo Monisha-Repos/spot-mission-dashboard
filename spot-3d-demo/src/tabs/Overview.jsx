@@ -224,7 +224,6 @@ export default function Overview({ theme, context, setContext, onReplay }) {
                     onFocus={() => setHoverPart(id)}
                     onBlur={() => setHoverPart(null)}
                   >
-                    <span className={`dot tone-${partStatus[id] || 'muted'}`} aria-hidden="true" />
                     {p ? p.name.split(' (')[0] : titleCase(id)}
                   </button>
                 );

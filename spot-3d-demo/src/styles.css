@@ -302,7 +302,6 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
   background: color-mix(in srgb, var(--surface) 70%, transparent); color: var(--muted); border-color: var(--line);
   transition: color .15s, border-color .15s, background-color .15s;
 }
-.part-picker .chip .dot { width: 8px; height: 8px; }
 .part-picker .chip:hover, .part-picker .chip.is-hover { color: var(--text); border-color: var(--signal); }
 .part-picker .chip[aria-pressed="true"] { background: var(--signal-tint); color: var(--text); border-color: var(--signal); outline: 1px solid var(--signal); outline-offset: -2px; }
 .stage-controls { position: absolute; left: var(--gutter); bottom: 24px; z-index: 3; display: flex; flex-wrap: wrap; gap: 8px; }
