@@ -28,8 +28,15 @@ from .store import DataStore
 log = logging.getLogger("spot")
 
 
+class ChatTurn(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str = Field(max_length=8000)
+
+
 class AskRequest(BaseModel):
     question: str = Field(min_length=1, max_length=2000)
+    # Earlier messages of this chat, oldest first; the assistant uses the last few to follow the conversation.
+    history: list[ChatTurn] = Field(default_factory=list, max_length=20)
     mode: Literal["simple", "technical"] = "simple"
     # What the user is looking at, e.g. {"part": "thermal_camera"} or {"waypoint": "WP05", "floor": 1}.
     context: dict[str, str | int | None] | None = None
@@ -258,7 +265,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         # Behind a proxy the visitor's address is the first X-Forwarded-For entry.
         client = (request.headers.get("x-forwarded-for", "").split(",")[0].strip()
                   or (request.client.host if request.client else "anonymous"))
-        return assistant.ask(data(), metrics(), body.question, body.mode, body.context, client=client)
+        return assistant.ask(data(), metrics(), body.question, body.mode, body.context, client=client,
+                             history=[t.model_dump() for t in body.history])
 
     if ops:
         from .ops.router import build_router

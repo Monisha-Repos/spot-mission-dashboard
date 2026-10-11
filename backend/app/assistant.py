@@ -52,6 +52,9 @@ improved improvement improving degrade degrading performance kpi kpis metric met
 measurements quality questionable critical severity severe operator dashboard data dataset field fields table replay
 """.split())
 CACHE_SIZE = 256
+# Conversation memory: how many earlier messages the model sees, and how much of each.
+HISTORY_TURNS = 6
+HISTORY_CHARS = 1500
 # USD per million tokens when the router's price list can't be read: deliberately pessimistic.
 UNKNOWN_PRICE = (3.0, 3.0)
 ID_PATTERN = re.compile(r"\b(M\d{3}|AN\d{3}|A\d{4}|R\d{4}|WP\d{2}|[A-Z]{2,5}-\d{3})\b", re.I)
@@ -233,16 +236,20 @@ class Assistant:
 
     # ---------- retrieval ----------
 
-    def retrieve(self, question: str, context: dict | None) -> tuple[list[dict], float]:
+    def retrieve(self, question: str, context: dict | None, previous: str = "", answer: str = "") -> tuple[list[dict], float]:
+        """Records for this question. `previous` (the user's last question) and `answer` (the reply to it) let a
+        follow-up such as "why does it fail there?" find the same records. Order: IDs named now, IDs in the previous
+        question, the first two IDs in the previous answer (what "it" / "there" most likely means), best text matches."""
         chosen: list[int] = []
-        for match in ID_PATTERN.findall(question):
+        for match in ID_PATTERN.findall(question) + ID_PATTERN.findall(previous) + ID_PATTERN.findall(answer)[:2]:
             if (i := self._aliases.get(match.upper())) is not None and i not in chosen:
                 chosen.append(i)
         context = {k: v for k, v in (context or {}).items() if v not in (None, "")}
         for key in ("mission", "waypoint", "asset", "part"):
             if key in context and (i := self._aliases.get(str(context[key]).upper())) is not None and i not in chosen:
                 chosen.append(i)
-        query = question + " " + " ".join(str(v) for v in context.values())
+        # The current question counts twice, so the earlier one only fills in what a short follow-up leaves out.
+        query = f"{question} {question} {previous} " + " ".join(str(v) for v in context.values())
         scores = linear_kernel(self._vectorizer.transform([query]), self._matrix).ravel()
         best = float(scores.max()) if len(scores) else 0.0
         for i in scores.argsort()[::-1][:TOP_K]:
@@ -253,31 +260,38 @@ class Assistant:
     # ---------- answering ----------
 
     def ask(self, ds: Dataset, model_metrics: dict | None, question: str, mode: str = "simple",
-            context: dict | None = None, client: str = "anonymous") -> dict:
+            context: dict | None = None, client: str = "anonymous", history: list[dict] | None = None) -> dict:
+        """`history`: earlier messages of this chat, oldest first, as {"role": "user"|"assistant", "content": ...}."""
         mode = mode if mode in SYSTEM_PROMPTS else "simple"
         self._ensure_index(ds, model_metrics)
-        docs, best = self.retrieve(question, context)
-        has_anchor = bool(ID_PATTERN.search(question)) or any((context or {}).get(k) for k in ("mission", "waypoint", "asset", "part"))
-        on_topic = has_anchor or bool(set(_words(question)) & self._vocab)
+        history = _clean_history(history)
+        previous = next((t["content"] for t in reversed(history) if t["role"] == "user"), "")
+        answer = next((t["content"] for t in reversed(history) if t["role"] == "assistant"), "")
+        docs, best = self.retrieve(question, context, previous, answer)
+        has_anchor = (bool(ID_PATTERN.search(question) or ID_PATTERN.search(previous) or ID_PATTERN.search(answer))
+                      or any((context or {}).get(k) for k in ("mission", "waypoint", "asset", "part")))
+        # A follow-up ("why?", "and the other one?") is on topic when the conversation it continues was.
+        on_topic = has_anchor or bool(set(_words(question + " " + previous)) & self._vocab)
         sources = [{"id": d["id"], "kind": d["kind"], "title": d["title"]} for d in docs]
         if not docs or not on_topic or (best < MIN_SCORE and not has_anchor):
             return {"answer": NO_DATA, "mode": mode, "provider": "guardrail", "citations": [], "sources": []}
 
         provider, error = self.settings.ask_provider, None
         uses_llm = provider in {"anthropic", "huggingface"}
-        key = (provider, mode, " ".join(question.lower().split()), tuple(sorted((context or {}).items())), self._index_for)
+        key = (provider, mode, " ".join(question.lower().split()), tuple(sorted((context or {}).items())),
+               tuple((t["role"], t["content"]) for t in history), self._index_for)
         if uses_llm and (hit := self._cache.get(key)):
             self._cache.move_to_end(key)
             return {**hit, "cached": True}
         if uses_llm:
             error = self._over_limit(client)
         if uses_llm and not error:
-            prompt = self._prompt(question, docs, context)
+            prompt = self._prompt(question, docs, context, follow_up=bool(history))
             try:
                 if provider == "anthropic":
-                    answer, model = self._call_anthropic(mode, prompt), self.settings.anthropic_model
+                    answer, model = self._call_anthropic(mode, prompt, history), self.settings.anthropic_model
                 else:
-                    answer, model = self._call_huggingface(mode, prompt)
+                    answer, model = self._call_huggingface(mode, prompt, history)
                 result = {"answer": answer, "mode": mode, "provider": provider, "model": model,
                           "citations": self._citations(answer, docs), "sources": sources}
                 self._cache[key] = result
@@ -297,12 +311,14 @@ class Assistant:
         return text if len(text) <= limit else text[:limit].rsplit(" ", 1)[0] + "…"
 
     @staticmethod
-    def _prompt(question: str, docs: list[dict], context: dict | None) -> str:
+    def _prompt(question: str, docs: list[dict], context: dict | None, follow_up: bool = False) -> str:
         records = "\n\n".join(f"[{d['id']}] ({d['kind']}) {d['title']}\n{d['text']}" for d in docs)
         on_screen = ""
         if context:
             on_screen = "The user is currently looking at: " + ", ".join(f"{k} {v}" for k, v in context.items() if v) + "\n\n"
-        return f"<records>\n{records}\n</records>\n\n{on_screen}Question: {question}"
+        note = ("This may be a follow-up to the conversation above: use it to understand what the question refers to, "
+                "but take every fact from these records.\n\n") if follow_up else ""
+        return f"<records>\n{records}\n</records>\n\n{on_screen}{note}Question: {question}"
 
     def _citations(self, answer: str, docs: list[dict]) -> list[dict]:
         cited, seen = [], set()
@@ -320,13 +336,13 @@ class Assistant:
             self._client = anthropic.Anthropic(api_key=key, timeout=60.0) if key else anthropic.Anthropic(timeout=60.0)
         return self._client
 
-    def _call_anthropic(self, mode: str, prompt: str) -> str:
+    def _call_anthropic(self, mode: str, prompt: str, history: list[dict] | None = None) -> str:
         try:
             response = self._anthropic_client().beta.messages.create(
                 model=self.settings.anthropic_model,
                 max_tokens=16000,
                 system=SYSTEM_PROMPTS[mode],
-                messages=[{"role": "user", "content": prompt}],
+                messages=[*(history or []), {"role": "user", "content": prompt}],
                 output_config={"effort": self.settings.ask_effort},
                 # If a safety classifier declines, the API retries on a fallback model in the same call.
                 betas=["server-side-fallback-2026-07-01"],
@@ -351,7 +367,7 @@ class Assistant:
         text = "".join(block.text for block in response.content if block.type == "text").strip()
         return text or NO_DATA
 
-    def _call_huggingface(self, mode: str, prompt: str) -> tuple[str, str]:
+    def _call_huggingface(self, mode: str, prompt: str, history: list[dict] | None = None) -> tuple[str, str]:
         """Main model on the configured provider, then the small fallback model wherever the router finds it."""
         from huggingface_hub import InferenceClient
         attempts = [(self.settings.hf_chat_model, self.settings.hf_provider or "auto")]
@@ -362,7 +378,8 @@ class Assistant:
             try:
                 client = InferenceClient(provider=provider, token=self.settings.hf_token or None, timeout=45)
                 response = client.chat_completion(
-                    messages=[{"role": "system", "content": SYSTEM_PROMPTS[mode]}, {"role": "user", "content": prompt}],
+                    messages=[{"role": "system", "content": SYSTEM_PROMPTS[mode]}, *(history or []),
+                              {"role": "user", "content": prompt}],
                     model=model, max_tokens=600, temperature=0.2)
             except Exception as e:  # huggingface_hub raises several unrelated error types
                 errors.append(f"{model}: {e}")
@@ -439,6 +456,24 @@ class Assistant:
 
 class LLMError(RuntimeError):
     pass
+
+
+def _clean_history(history: list[dict] | None) -> list[dict]:
+    """The last few turns, trimmed, alternating and starting with the user, as both LLM APIs expect."""
+    turns = []
+    for t in (history or [])[-HISTORY_TURNS:]:
+        role, content = t.get("role"), " ".join(str(t.get("content") or "").split())[:HISTORY_CHARS]
+        if role not in ("user", "assistant") or not content:
+            continue
+        if turns and turns[-1]["role"] == role:
+            turns[-1]["content"] += "\n" + content
+        else:
+            turns.append({"role": role, "content": content})
+    while turns and turns[0]["role"] != "user":
+        turns.pop(0)
+    while turns and turns[-1]["role"] != "assistant":  # the question being asked now is added separately
+        turns.pop()
+    return turns
 
 
 def _words(text: str) -> list[str]:

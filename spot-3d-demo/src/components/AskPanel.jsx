@@ -79,8 +79,10 @@ export default function AskPanel({ mode, context }) {
     setMessages(m => [...m, { role: 'user', text }]);
     setBusy(true);
     const ctx = Object.fromEntries(Object.entries(context || {}).filter(([, v]) => v !== undefined && v !== null && v !== ''));
+    // The last few exchanges, so follow-ups like "why did it fail?" know what "it" is. Failed requests are left out.
+    const history = messages.filter(m => !m.error).slice(-6).map(m => ({ role: m.role === 'ai' ? 'assistant' : 'user', content: m.text }));
     try {
-      const res = await api('/ask', { method: 'POST', body: { question: text, mode, context: Object.keys(ctx).length ? ctx : null } });
+      const res = await api('/ask', { method: 'POST', body: { question: text, mode, history, context: Object.keys(ctx).length ? ctx : null } });
       setMessages(m => [...m, { role: 'ai', text: res.answer, citations: res.citations || [], provider: res.provider }]);
     } catch (e) {
       setMessages(m => [...m, { role: 'ai', text: e.message, error: true, question: text }]);

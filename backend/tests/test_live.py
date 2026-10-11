@@ -99,7 +99,7 @@ def test_ai_spend_guards(tmp_path, monkeypatch):
                              ASK_SPEND_FILE=str(tmp_path / "spend.json"))
     with TestClient(create_app(settings)) as c:
         calls = []
-        monkeypatch.setattr(Assistant, "_call_huggingface", lambda self, mode, prompt: (calls.append(1), ("Answer [WP05]", "test-model"))[1])
+        monkeypatch.setattr(Assistant, "_call_huggingface", lambda self, mode, prompt, history=None: (calls.append(1), ("Answer [WP05]", "test-model"))[1])
         ask = lambda q: c.post("/ask", json={"question": q}).json()  # noqa: E731
         first = ask("Why did WP05 fail?")
         assert first["provider"] == "huggingface" and first["model"] == "test-model"
